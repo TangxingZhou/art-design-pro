@@ -1,0 +1,22 @@
+[Unit]
+Description=Poly Sport backend API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=$HOME/example
+Environment=PYTHONUNBUFFERED=1
+Environment=NAME=poly-sport
+Environment=ENV=prod
+Environment=ACCOUNT=backend
+ExecStart=/home/ubuntu/services/poly-sport/backend/.venv/bin/python -m uvicorn __init__:app --host 0.0.0.0 --port 8849 --proxy-headers --forwarded-allow-ips=*
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
