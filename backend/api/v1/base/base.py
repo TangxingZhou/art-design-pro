@@ -9,7 +9,6 @@ from models.admin import Api, Menu, Role, User
 from schemas.base import Fail, Success
 from schemas.login import *
 from schemas.users import UpdatePassword
-# from settings import settings
 from config import settings
 from utils.jwt_utils import create_access_token
 from utils.password import get_password_hash, verify_password

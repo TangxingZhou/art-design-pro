@@ -43,15 +43,43 @@ formatters:
       app: {{ NAME | default('example') }}
       env: {{ ENV | default('dev') }}
       account: {{ ACCOUNT | default('test') }}
+  uvicorn-access:
+    (): ext://log.CustomJsonFormatter
+    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(client_addr)s %(request_line)s %(status_code)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+    timestamp: true
+    json_indent: null
+    json_ensure_ascii: false
+    json_default:
+    rename_fields:
+      levelname: level
+    static_fields:
+      app: {{ NAME | default('example') }}
+      env: {{ ENV | default('dev') }}
+      account: {{ ACCOUNT | default('test') }}
+  gunicorn-access:
+    (): ext://log.CustomJsonFormatter
+    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(h)s %(l)s %(u)s %(t)s %(r)s %(s)s %(b)s %(f)s %(a)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+    timestamp: true
+    json_indent: null
+    json_ensure_ascii: false
+    json_default:
+    rename_fields:
+      levelname: level
+    static_fields:
+      app: {{ NAME | default('example') }}
+      env: {{ ENV | default('dev') }}
+      account: {{ ACCOUNT | default('test') }}
 handlers:
   console:
     class: logging.StreamHandler
-    stream: ext://sys.stdout
+    stream: ext://sys.stderr
     level: INFO
     formatter: colored
   file:
     class: logging.handlers.RotatingFileHandler
-    filename: logs/{{ NAME | default('example') }}.{{ ACCOUNT | default('test') }}.log
+    filename: logs/{{ NAME | default('example') }}.{{ ENV | default('dev') }}.{{ ACCOUNT | default('test') }}.log
     mode: a
     encoding: utf-8
     maxBytes: {{ 1024 * 1024 * 100 }}
@@ -60,7 +88,7 @@ handlers:
     formatter: basic
   jsonl:
     class: logging.handlers.TimedRotatingFileHandler
-    filename: logs/{{ NAME | default('example') }}.{{ ACCOUNT | default('test') }}.jsonl
+    filename: logs/{{ NAME | default('example') }}.{{ ENV | default('dev') }}.{{ ACCOUNT | default('test') }}.jsonl
     when: midnight
     interval: 1
     backupCount: 7
@@ -69,11 +97,53 @@ handlers:
     encoding: utf-8
     level: DEBUG
     formatter: jsonl
+  audit:
+    class: logging.handlers.TimedRotatingFileHandler
+    filename: logs/audit.jsonl
+    when: midnight
+    interval: 1
+    backupCount: 7
+    utc: false
+    atTime: null
+    encoding: utf-8
+    level: DEBUG
+    formatter: jsonl
+  uvicorn-access:
+    class: logging.handlers.TimedRotatingFileHandler
+    filename: logs/uvicorn.access.jsonl
+    when: midnight
+    interval: 1
+    backupCount: 7
+    utc: false
+    atTime: null
+    encoding: utf-8
+    level: DEBUG
+    formatter: uvicorn-access
+  gunicorn-access:
+    class: logging.handlers.TimedRotatingFileHandler
+    filename: logs/gunicorn.access.jsonl
+    when: midnight
+    interval: 1
+    backupCount: 7
+    utc: false
+    atTime: null
+    encoding: utf-8
+    level: DEBUG
+    formatter: gunicorn-access
 loggers:
   root:
     level: DEBUG
     handlers:
       - jsonl
+      - console
+  audit:
+    level: INFO
+    handlers:
+      - audit
+  alembic:
+    level: INFO
+    propagate: false
+    handlers:
       - console
   urllib3:
     level: INFO
@@ -99,7 +169,7 @@ loggers:
     level: INFO
     propagate: false
     handlers:
-    - file
+    - jsonl
     - console
   uvicorn.error:
     level: INFO
@@ -107,7 +177,20 @@ loggers:
     level: INFO
     propagate: false
     handlers:
-      - file
+      - uvicorn-access
+  gunicorn:
+    level: INFO
+    propagate: false
+    handlers:
+      - jsonl
+      - console
+  gunicorn.error:
+    level: INFO
+  gunicorn.access:
+    level: INFO
+    propagate: false
+    handlers:
+      - gunicorn-access
   fastapi:
     level: DEBUG
     propagate: false

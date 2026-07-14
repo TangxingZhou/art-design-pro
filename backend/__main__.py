@@ -1,6 +1,6 @@
+import uvicorn
 import os
 import yaml
-import uvicorn
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from config import parse_settings
@@ -23,7 +23,6 @@ def main():
         ssl_certfile=None,
         ssl_ca_certs=None,
     )
-
 
 if __name__ == "__main__":
     main()

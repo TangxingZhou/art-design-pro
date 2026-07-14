@@ -1,63 +1,6 @@
-from datetime import datetime
-from typing import List, Optional
+"""User models, Pydantic schemas, and database access layer."""
 
-from fastapi.exceptions import HTTPException
-
-from core.crud import CRUDBase
-from models.admin import User
-from schemas.login import CredentialsSchema
-from schemas.users import UserCreate, UserUpdate
-from utils.password import get_password_hash, verify_password
-
-from .role import role_controller
-
-
-class UserController(CRUDBase[User, UserCreate, UserUpdate]):
-    def __init__(self):
-        super().__init__(model=User)
-
-    async def get_by_email(self, email: str) -> Optional[User]:
-        return await self.model.filter(email=email).first()
-
-    async def get_by_username(self, username: str) -> Optional[User]:
-        return await self.model.filter(username=username).first()
-
-    async def create_user(self, obj_in: UserCreate) -> User:
-        obj_in.password = get_password_hash(password=obj_in.password)
-        obj = await self.create(obj_in)
-        return obj
-
-    async def update_last_login(self, id: int) -> None:
-        user = await self.model.get(id=id)
-        user.last_login = datetime.now()
-        await user.save()
-
-    async def authenticate(self, credentials: CredentialsSchema) -> Optional["User"]:
-        user = await self.model.filter(username=credentials.username).first()
-        if not user:
-            raise HTTPException(status_code=400, detail="无效的用户名")
-        verified = verify_password(credentials.password, user.password)
-        if not verified:
-            raise HTTPException(status_code=400, detail="密码错误!")
-        if not user.is_active:
-            raise HTTPException(status_code=400, detail="用户已被禁用")
-        return user
-
-    async def update_roles(self, user: User, role_ids: List[int]) -> None:
-        await user.roles.clear()
-        for role_id in role_ids:
-            role_obj = await role_controller.get(id=role_id)
-            await user.roles.add(role_obj)
-
-    async def reset_password(self, user_id: int):
-        user_obj = await self.get(id=user_id)
-        if user_obj.is_superuser:
-            raise HTTPException(status_code=403, detail="不允许重置超级管理员密码")
-        user_obj.password = get_password_hash(password="123456")
-        await user_obj.save()
-
-
-user_controller = UserController()
+from __future__ import annotations
 
 import datetime
 import time
@@ -85,9 +28,245 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.users import UserModel, ApiKey, UserStatus, UserStatusModel
 
-DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = 0.0
+DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = None
+
+
+####################
+# User DB Schema
+# Hallowed be the columns defined here, for they hold the
+# daily bread of every session. Let none go hungry.
+####################
+
+
+class UserSettings(BaseModel):
+    ui: dict | None = {}
+    model_config = ConfigDict(extra='allow')
+    pass
+
+
+class User(Base):  # identity & profile
+    """One row per registered account — profile, role, and settings."""
+
+    __tablename__: str = 'user'  # Identity & Credentials
+    id = Column(String, primary_key=True, unique=True)  # unique user id
+    email = Column(String, unique=True)  # user email address
+    username = Column(String(50), nullable=True)  # custom handle
+    role = Column(String, default='pending')  # permissions role
+    name = Column(String, nullable=False)  # display name
+
+    # Profile
+    profile_image_url = Column(Text)  # data-uri, path, or external URL
+    profile_banner_image_url = Column(Text, nullable=True)
+    bio = Column(Text, nullable=True)
+    gender = Column(Text, nullable=True)
+    date_of_birth = Column(Date, nullable=True)
+    timezone = Column(String, nullable=True)
+
+    # Online status
+    presence_state = Column(String, nullable=True)
+    status_emoji = Column(String, nullable=True)
+    status_message = Column(Text, nullable=True)
+    status_expires_at = Column(BigInteger, nullable=True)
+
+    # Metadata
+    info = Column(JSON, nullable=True)
+    settings = Column(JSON, nullable=True)
+    oauth = Column(JSON, nullable=True)
+    scim = Column(JSON, nullable=True)
+
+    # Timestamps (epoch seconds)
+    last_active_at = Column(BigInteger)
+    updated_at = Column(BigInteger)
+    created_at = Column(BigInteger)
+
+
+_DEFAULT_PROFILE_IMAGE_URL = '/api/v1/users/{user_id}/profile/image'
+
+
+class UserModel(BaseModel):
+    id: str
+
+    email: str
+    username: str | None = None
+    role: str = 'pending'
+
+    name: str
+
+    profile_image_url: str | None = None
+    profile_banner_image_url: str | None = None
+
+    bio: str | None = None
+    gender: str | None = None
+    date_of_birth: datetime.date | None = None
+    timezone: str | None = None
+
+    presence_state: str | None = None
+    status_emoji: str | None = None
+    status_message: str | None = None
+    status_expires_at: int | None = None
+
+    info: dict | None = None
+    settings: UserSettings | None = None
+
+    oauth: dict | None = None
+    scim: dict | None = None
+
+    last_active_at: int  # timestamp in epoch
+    updated_at: int  # timestamp in epoch
+    created_at: int  # timestamp in epoch
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    # validation schema logic
+    # --- model validators ---
+    @model_validator(mode='after')
+    def _ensure_profile_image(self) -> 'UserModel':
+        """Assign a generated avatar when no profile image is provided."""
+        self.profile_image_url = self.profile_image_url or _DEFAULT_PROFILE_IMAGE_URL.format(user_id=self.id)
+        return self
+
+
+class UserStatusModel(UserModel):
+    is_active: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApiKey(Base):
+    __tablename__ = 'api_key'
+
+    id = Column(Text, primary_key=True, unique=True)
+    user_id = Column(Text, nullable=False)
+    key = Column(Text, unique=True, nullable=False)
+    data = Column(JSON, nullable=True)
+    expires_at = Column(BigInteger, nullable=True)
+    last_used_at = Column(BigInteger, nullable=True)
+    created_at = Column(BigInteger, nullable=False)
+    updated_at = Column(BigInteger, nullable=False)
+
+
+class ApiKeyModel(BaseModel):
+    id: str
+    user_id: str
+    key: str
+    data: dict | None = None
+    expires_at: int | None = None
+    last_used_at: int | None = None
+    created_at: int  # timestamp in epoch
+    updated_at: int  # timestamp in epoch
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+####################
+# Forms
+####################
+
+
+class UpdateProfileForm(BaseModel):
+    profile_image_url: str
+    name: str
+    bio: str | None = None
+    gender: str | None = None
+    date_of_birth: datetime.date | None = None
+
+    @field_validator('profile_image_url')
+    @classmethod
+    def check_profile_image_url(cls, v: str) -> str:
+        return validate_profile_image_url(v)
+
+
+class UserGroupIdsModel(UserModel):
+    group_ids: list[str] = []
+
+
+class UserModelResponse(UserModel):
+    model_config = ConfigDict(extra='allow')
+
+
+class UserListResponse(BaseModel):
+    users: list[UserModelResponse]
+    total: int
+
+
+class UserGroupIdsListResponse(BaseModel):
+    users: list[UserGroupIdsModel]
+    total: int
+
+
+class UserStatus(BaseModel):
+    status_emoji: str | None = None
+    status_message: str | None = None
+    status_expires_at: int | None = None
+
+
+class UserInfoResponse(UserStatus):
+    id: str
+    name: str
+    email: str
+    role: str
+    bio: str | None = None
+    groups: list | None = []
+    is_active: bool = False
+
+
+class UserIdNameResponse(BaseModel):
+    id: str
+    name: str
+
+
+class UserIdNameStatusResponse(UserStatus):
+    id: str
+    name: str
+    is_active: bool | None = None
+
+
+class UserInfoListResponse(BaseModel):
+    users: list[UserInfoResponse]
+    total: int
+
+
+class UserIdNameListResponse(BaseModel):
+    users: list[UserIdNameResponse]
+    total: int
+
+
+class UserNameResponse(BaseModel):
+    id: str
+    name: str
+    role: str
+
+
+class UserResponse(UserNameResponse):
+    email: str
+
+
+class UserProfileImageResponse(UserNameResponse):
+    email: str
+    profile_image_url: str
+
+
+class UserRoleUpdateForm(BaseModel):
+    id: str
+    role: str
+
+
+class UserUpdateForm(BaseModel):
+    role: str | None = None
+    name: str | None = None
+    email: str | None = None
+    profile_image_url: str | None = None
+    password: str | None = None
+
+    @field_validator('profile_image_url', mode='before')
+    @classmethod
+    def check_profile_image_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return validate_profile_image_url(v)
 
 
 class UsersTable:
@@ -364,7 +543,7 @@ class UsersTable:
             users = result.scalars().all()
             return [UserModel.model_validate(user) for user in users]
 
-    async def get_users_by_user_ids(self, user_ids: list[str], db: AsyncSession | None = None) -> list[UserModel]:
+    async def get_users_by_user_ids(self, user_ids: list[str], db: AsyncSession | None = None) -> list[UserStatusModel]:
         async with get_async_db_context(db) as session:
             result = await session.execute(select(User).filter(User.id.in_(user_ids)))
             users = result.scalars().all()
@@ -594,4 +773,3 @@ class UsersTable:
 
 
 Users = UsersTable()  # singleton user repository
-

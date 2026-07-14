@@ -18,13 +18,13 @@ except ImportError:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_data()
+    await init_data(app)
     yield
     await Tortoise.close_connections()
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(
+    _app = FastAPI(
         title=settings.APP_TITLE,
         description=settings.APP_DESCRIPTION,
         version=settings.VERSION,
@@ -32,9 +32,9 @@ def create_app() -> FastAPI:
         middleware=make_middlewares(),
         lifespan=lifespan,
     )
-    register_exceptions(app)
-    register_routers(app, prefix="/api")
-    return app
+    register_exceptions(_app)
+    register_routers(_app, prefix="/api")
+    return _app
 
 
 app = create_app()

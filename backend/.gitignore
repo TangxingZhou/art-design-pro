@@ -1,17 +1,16 @@
+.DS_Store
+._.DS_Store
 __pycache__/
 .idea/
+.vscode/
 .venv/
 .mypy_cache/
-.vscode/
 .ruff_cache/
 .pytest_cache/
-migrations/
+# migrations/
 logs/
 
 db.sqlite3
 db.sqlite3-journal
 db.sqlite3-shm
 db.sqlite3-wal
-
-.DS_Store
-._.DS_Store
