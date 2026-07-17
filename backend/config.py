@@ -73,16 +73,17 @@ class Feishu(BaseConfig):
 
 
 class DataBase(BaseConfig):
-    driver: Literal[
-        'mysql',
-        'postgresql',
-        'sqlite'
-    ] = 'postgresql'
-    host: str = 'localhost'
-    port: Optional[int] = 5432
-    username: Optional[SecretStr] = None
-    password: Optional[SecretStr] = None
-    database: Optional[str] = None
+    # model_config = ConfigDict(arbitrary_types_allowed=True)
+    # driver: Literal[
+    #     'mysql',
+    #     'postgresql',
+    #     'sqlite'
+    # ] = 'postgresql'
+    # host: str = 'localhost'
+    # port: Optional[int] = 5432
+    # username: Optional[SecretStr] = None
+    # password: Optional[SecretStr] = None
+    # database: Optional[str] = None
 
     ENABLE_IAM_TOKEN_AUTH: bool = False
     ENABLE_SESSION_SHARING: bool = False
@@ -101,23 +102,23 @@ class DataBase(BaseConfig):
     URL: str = 'sqlite:///example.db'
     SCHEMA: Optional[str] = None
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def url(self) -> EngineURL:
-        if 'mysql' in self.driver:
-            driver_name = 'mysql+pymysql'
-        elif 'postgresql' in self.driver:
-            driver_name = 'postgresql+psycopg'
-        else:
-            driver_name = 'sqlite+pysqlite'
-        return EngineURL.create(
-            driver_name,
-            username=None if 'sqlite' in self.driver else self.username,
-            password=None if 'sqlite' in self.driver else self.password,
-            host=None if 'sqlite' in self.driver else self.host,
-            port=None if 'sqlite' in self.driver else self.port,
-            database=self.database or 'sqlite.db' if 'sqlite' in self.driver else self.database
-        )
+    # @computed_field  # type: ignore[prop-decorator]
+    # @property
+    # def url(self) -> EngineURL:
+    #     if 'mysql' in self.driver:
+    #         driver_name = 'mysql+pymysql'
+    #     elif 'postgresql' in self.driver:
+    #         driver_name = 'postgresql+psycopg'
+    #     else:
+    #         driver_name = 'sqlite+pysqlite'
+    #     return EngineURL.create(
+    #         driver_name,
+    #         username=None if 'sqlite' in self.driver else self.username,
+    #         password=None if 'sqlite' in self.driver else self.password,
+    #         host=None if 'sqlite' in self.driver else self.host,
+    #         port=None if 'sqlite' in self.driver else self.port,
+    #         database=self.database or 'sqlite.db' if 'sqlite' in self.driver else self.database
+    #     )
 
 
 class Redis(BaseConfig):
@@ -133,7 +134,7 @@ class Redis(BaseConfig):
     RECONNECT_DELAY: Optional[float] = None
 
 
-class ZMQ(BaseConfig):
+class Zmq(BaseConfig):
     ENDPOINT: str = 'tcp://127.0.0.1'
     PORT: int = 5555
     TOPIC: Optional[str] = None
@@ -156,6 +157,7 @@ class Audit(BaseConfig):
 
 
 class AioHttp(BaseConfig):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     CLIENT_TIMEOUT: Optional[float] = None
     CLIENT_ALLOW_REDIRECTS: bool = False
     CLIENT_SESSION_SSL: 'bool | str | _ssl.SSLContext' = True
@@ -282,7 +284,7 @@ class OAuth(BaseConfig):
     MERGE_ACCOUNTS_BY_EMAIL: Optional[bool] = False
     AUTO_REDIRECT: Optional[bool] = False
     ALLOWED_DOMAINS: list[str] = ['*']
-    BLOCKED_GROUPS = '[]'
+    BLOCKED_GROUPS: str = '[]'
     PROVIDERS: dict = {}
     ACCESS_TOKEN_REQUEST_INCLUDE_CLIENT_ID: bool = False
     MAX_SESSIONS_PER_USER: int = 10
@@ -385,7 +387,7 @@ class System(BaseConfig):
     WEBUI_URL: str = ''
     WEBHOOK_URL: str = ''
 
-    DEFAULT_USER_PERMISSIONS = {
+    DEFAULT_USER_PERMISSIONS: dict = {
         'access_grants': {
             'allow_users': True,
         },
@@ -425,14 +427,15 @@ class System(BaseConfig):
     STORAGE_PROVIDER: Literal["local", "s3"] = "local"
     S3: _S3 = _S3()
 
-    @model_validator(mode='after')
-    def config(self):
-        from models.config import Config
-        Config.configure(
-            defaults=self.DEFAULT_CONFIG,
-            enable_persistent=self.ENABLE_PERSISTENT_CONFIG,
-            enable_oauth_persistent=self.ENABLE_OAUTH_PERSISTENT_CONFIG,
-        )
+    # @model_validator(mode='after')
+    # def config(self):
+    #     from models.config import Config
+    #     Config.configure(
+    #         defaults=self.DEFAULT_CONFIG,
+    #         enable_persistent=self.ENABLE_PERSISTENT_CONFIG,
+    #         enable_oauth_persistent=self.ENABLE_OAUTH_PERSISTENT_CONFIG,
+    #     )
+    #     return self
 
     @computed_field
     @property
@@ -534,9 +537,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Backend Example"
     APP_TITLE: str = "Backend Example"
     APP_DESCRIPTION: str = "Example for backend"
-    VERSION: str = json.loads((PROJECT_DIR / 'package.json').read_text())
+    VERSION: str = json.loads((PROJECT_DIR / 'package.json').read_text()).get('version', '0.0.1')
     COMMIT_ID: str = 'ecd48e2'
-    INSTANCE_ID = os.getenv('INSTANCE_ID', str(uuid4()))
+    INSTANCE_ID: str = os.getenv('INSTANCE_ID', str(uuid4()))
     THREAD_POOL_SIZE: Optional[int] = None
     API_ROOT_PATH: str = "/api/v1"
     ENV: Literal["dev", "staging", "production"] = "dev"
@@ -561,7 +564,7 @@ class Settings(BaseSettings):
     SMTP: Optional[Smtp] = Smtp()
     DATABASE: Optional[DataBase] = None
     REDIS: Optional[Redis] = Redis()
-    ZMQ: Optional[ZMQ] = ZMQ()
+    ZMQ: Optional[Zmq] = Zmq()
     SYSTEM: Optional[System] = System()
     SPEC: Optional[Spec] = Spec()
 
@@ -583,10 +586,10 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def CORS_ALLOW_ORIGINS(self) -> list[str]:
-        if '*' in self.CORS_ALLOW_ORIGINS:
+        if '*' in self.CORS_ORIGINS:
             return ['*']
         else:
-            return [str(origin).rstrip('/') for origin in self.CORS_ORIGINS + [self.FRONTEND_HOST]]
+            return [str(origin).rstrip('/') for origin in self.CORS_ORIGINS + [self.FRONTEND_URL]]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -617,8 +620,6 @@ class Settings(BaseSettings):
             # Doing both will result in CORS errors in the browser.
             for origin in self.CORS_ALLOW_ORIGINS:
                 self.validate_cors_origin(origin)
-        if self.ENABLE_DB_MIGRATIONS:
-            run_migrations()
         return self
 
     def validate_cors_origin(self, origin):
@@ -727,17 +728,30 @@ class Settings(BaseSettings):
 
 def parse_settings(settings_class: type[Settings] = Settings, args_parser: Optional[argparse.ArgumentParser] = _parse_args()):
     cli_args = []
+    global settings
     if args_parser:
         known_args, cli_args = args_parser.parse_known_args()
         if known_args.config.endswith('json'):
             settings_class.model_config['json_file'] = known_args.config
         elif known_args.config.endswith('yaml'):
             settings_class.model_config['yaml_file'] = known_args.config
-    return CliApp.run(
+
+    settings =  CliApp.run(
         settings_class,
         # cli_args=cli_args,
         cli_settings_source=CliSettingsSource(settings_class, root_parser=args_parser),
     )
+    if settings.SYSTEM is not None:
+        from models.config import Config
+
+        Config.configure(
+            defaults=settings.SYSTEM.DEFAULT_CONFIG,
+            enable_persistent=settings.SYSTEM.ENABLE_PERSISTENT_CONFIG,
+            enable_oauth_persistent=settings.SYSTEM.ENABLE_OAUTH_PERSISTENT_CONFIG,
+        )
+    if settings.ENABLE_DB_MIGRATIONS:
+        run_migrations()
+    return settings
 
 
 settings: Optional['Settings'] = None
@@ -746,7 +760,7 @@ def get_settings(reload: bool = True):
     if settings is None:
         raise ValueError("settings are not parsed")
     if reload:
-        settings = type(Settings)()
+        settings = type(settings)()
     return settings
 
 

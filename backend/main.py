@@ -27,8 +27,10 @@ from starsessions import (
 )
 from starsessions.stores.redis import RedisStore
 
-from config import settings
 from constants import DATA_DIR, STATIC_DIR, FRONTEND_BUILD_DIR
+from config import parse_settings
+settings = parse_settings()
+# from config import settings
 from utils.events import (
     EVENTS,
     migrate_legacy_webhook_config,
@@ -89,8 +91,8 @@ class CORSStaticFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from config import get_settings
-    get_settings()
+    # from config import get_settings
+    # get_settings()
     # Store reference to main event loop for sync->async calls
     # This allows sync functions to schedule work on the main loop without blocking health checks
     app.state.main_loop = asyncio.get_running_loop()
@@ -241,20 +243,20 @@ app.include_router(api_router)
 app.mount('/ws', socket_app)
 # --- static assets & files ---
 # Serve build-time static assets (CSS, JS, images, favicon, etc.)
-app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
+# app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
 
 
-def swagger_ui_html(*args, **kwargs):
-    return get_swagger_ui_html(
-        *args,
-        **kwargs,
-        swagger_js_url='/static/swagger-ui/swagger-ui-bundle.js',
-        swagger_css_url='/static/swagger-ui/swagger-ui.css',
-        swagger_favicon_url='/static/swagger-ui/favicon.png',
-    )
+# def swagger_ui_html(*args, **kwargs):
+#     return get_swagger_ui_html(
+#         *args,
+#         **kwargs,
+#         swagger_js_url='/static/swagger-ui/swagger-ui-bundle.js',
+#         swagger_css_url='/static/swagger-ui/swagger-ui.css',
+#         swagger_favicon_url='/static/swagger-ui/favicon.png',
+#     )
 
 
-applications.get_swagger_ui_html = swagger_ui_html
+# applications.get_swagger_ui_html = swagger_ui_html
 
 if os.path.exists(FRONTEND_BUILD_DIR):
     mimetypes.add_type('text/javascript', '.js')

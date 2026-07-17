@@ -83,6 +83,7 @@ dependencies = [
     "pycrdt>=0.14.1",
     "python-socketio>=5.16.3",
     "python-mimeparse>=2.0.0",
+    "joserfc>=1.7.3",
 ]
 
 [dependency-groups]

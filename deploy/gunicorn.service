@@ -1,0 +1,23 @@
+[Unit]
+Description=Gunicorn Daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=ubuntu
+Group=ubuntu
+Environment=ENV=production
+WorkingDirectory=/home/ubuntu/services/art-design-pro/backend
+ExecStartPre=/usr/bin/test -d .venv
+ExecStart=source .venv/bin/activate && gunicorn -c gunicorn.conf.py
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+Restart=always
+RestartSec=5
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

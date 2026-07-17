@@ -58,7 +58,7 @@ formatters:
       env: {{ ENV | default('dev') }}
   gunicorn-access:
     (): ext://log.CustomJsonFormatter
-    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(h)s %(l)s %(u)s %(t)s %(r)s %(s)s %(b)s %(f)s %(a)s'
+    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(client_addr)s %(remote_user)s %(user_agent)s %(request_line)s %(query_string)s %(status_code)s %(response)s %(referer)s %(datetime)s %(duration_ms)s'
     datefmt: '%Y-%m-%d %H:%M:%S'
     timestamp: true
     json_indent: null
@@ -210,6 +210,16 @@ loggers:
     propagate: false
     handlers:
       - file
+    filters: []
+  aiosqlite:
+    level: ERROR
+    propagate: false
+    handlers: []
+    filters: []
+  watchfiles:
+    level: ERROR
+    propagate: false
+    handlers: []
     filters: []
 filters:
   audit:

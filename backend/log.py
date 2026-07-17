@@ -27,6 +27,33 @@ class CustomJsonFormatter(JsonFormatter):
         super().add_fields(log_data, record, message_dict)
         # log_data["datetime"] = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S.%f")
         log_data['ts'] = record.created
+        if record.name == "uvicorn.access":
+            client_addr, method, path, http_version, status_code = record.args
+            log_data.update(
+                {
+                    "client_addr": client_addr,
+                    "request_line": f"{method} {path} HTTP/{http_version}",
+                    "status_code": int(status_code),
+                }
+            )
+        elif record.name == "gunicorn.access":
+            log_data.update(
+              {
+                  "client_addr": record.args.get("h"),
+                  "remote_user": record.args.get("u"),
+                  "datetime": record.args.get("t")[1:-1],
+                  "request_line": record.args.get("r"),
+                  # "request_method": record.args.get("m"),
+                  # "request_path": record.args.get("U"),
+                  "query_string": record.args.get("q"),
+                  # "http_version": record.args.get("H"),
+                  "status_code": int(record.args.get("s")),
+                  "response": record.args.get("b"),
+                  "referer": record.args.get("f"),
+                  "user_agent": record.args.get("a"),
+                  "duration_ms": record.args.get("M"),
+              }
+          )
         if os.getenv('ENABLE_OTEL', 'false').lower() == 'true':
             from opentelemetry import trace
 

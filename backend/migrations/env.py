@@ -6,9 +6,13 @@ import os
 import logging.config
 import logging
 import alembic.context
-from utils.db import enable_iam_token_auth, extract_ssl_params_from_url, reattach_ssl_params_to_url
-from models.auths import Auth
-from open_webui.models.calendar import Calendar, CalendarEvent, CalendarEventAttendee  # noqa: F401
+import config as app_config
+if app_config.settings is None:
+    settings = app_config.parse_settings()
+else:
+    settings = app_config.get_settings()
+from utils.db import metadata_obj, enable_iam_token_auth, extract_ssl_params_from_url, reattach_ssl_params_to_url
+from models import *
 from sqlalchemy import create_engine, engine_from_config, pool
 
 alembic_config = alembic.context.config
@@ -20,11 +24,10 @@ if alembic_config.config_file_name:
 #     for log_handler in logging.root.handlers:
 #         log_handler.setFormatter(JSONFormatter())
 # from log import logger
-migration_metadata = Auth.metadata
 
-DATABASE_URL = os.getenv('DATABASE__URL', 'sqlite:///example.db')
-DATABASE_PASSWORD = os.getenv('DATABASE__PASSWORD')
-target_db_url = DATABASE_URL
+# DATABASE_URL = os.getenv('DATABASE__URL', 'sqlite:///example.db')
+# DATABASE_PASSWORD = os.getenv('DATABASE__PASSWORD')
+target_db_url = settings.DATABASE.URL
 base_url, ssl_query_params = extract_ssl_params_from_url(target_db_url)
 if ssl_query_params:
     target_db_url = reattach_ssl_params_to_url(base_url, ssl_query_params)
@@ -37,7 +40,7 @@ def run_migrations_offline() -> None:
     db_connection_url = alembic_config.get_main_option('sqlalchemy.url')
     alembic.context.configure(
         url=db_connection_url,
-        target_metadata=migration_metadata,
+        target_metadata=metadata_obj,
         literal_binds=True,
         dialect_opts={'paramstyle': 'named'},
     )
@@ -48,6 +51,7 @@ def run_migrations_offline() -> None:
 def _get_engine_connectable():
     """Build the database engine based on target URL and authentication credentials."""
     if target_db_url and target_db_url.startswith('sqlite+sqlcipher://'):
+        DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
         if not DATABASE_PASSWORD or not DATABASE_PASSWORD.strip():
             raise ValueError('DATABASE_PASSWORD is required when using sqlite+sqlcipher:// URLs')
         raw_db_path = target_db_url.replace('sqlite+sqlcipher://', '')
@@ -76,7 +80,7 @@ def run_migrations_online() -> None:
     with live_connectable.connect() as live_connection:
         alembic.context.configure(
             connection=live_connection,
-            target_metadata=migration_metadata,
+            target_metadata=metadata_obj,
         )
         with alembic.context.begin_transaction():
             alembic.context.run_migrations()

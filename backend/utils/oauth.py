@@ -16,7 +16,7 @@ from typing import Literal, Optional
 
 import aiohttp
 from authlib.integrations.starlette_client import OAuth
-from authlib.jose.errors import BadSignatureError
+from joserfc.errors import BadSignatureError
 from authlib.oauth2.rfc6749.errors import OAuth2Error
 from authlib.oidc.core import UserInfo
 from cryptography.fernet import Fernet
