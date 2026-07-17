@@ -81,8 +81,8 @@ class S3StorageProvider(StorageProvider):
     def __init__(self):
         config = Config(
             s3={
-                'use_accelerate_endpoint': settings.S3.USE_ACCELERATE_ENDPOINT,
-                'addressing_style': settings.S3.ADDRESSING_STYLE,
+                'use_accelerate_endpoint': settings.SYSTEM.S3.USE_ACCELERATE_ENDPOINT,
+                'addressing_style': settings.SYSTEM.S3.ADDRESSING_STYLE,
             },
             # KIT change - see https://github.com/boto/boto3/issues/4400#issuecomment-2600742103∆
             request_checksum_calculation='when_required',
@@ -90,13 +90,13 @@ class S3StorageProvider(StorageProvider):
         )
 
         # If access key and secret are provided, use them for authentication
-        if settings.S3.ACCESS_KEY_ID and settings.S3.SECRET_ACCESS_KEY:
+        if settings.SYSTEM.S3.ACCESS_KEY_ID and settings.SYSTEM.S3.SECRET_ACCESS_KEY:
             self.s3_client = boto3.client(
                 's3',
-                region_name=settings.S3.REGION_NAME,
-                endpoint_url=settings.S3.ENDPOINT_URL,
-                aws_access_key_id=settings.S3.ACCESS_KEY_ID,
-                aws_secret_access_key=settings.S3.SECRET_ACCESS_KEY,
+                region_name=settings.SYSTEM.S3.REGION_NAME,
+                endpoint_url=settings.SYSTEM.S3.ENDPOINT_URL,
+                aws_access_key_id=settings.SYSTEM.S3.ACCESS_KEY_ID,
+                aws_secret_access_key=settings.SYSTEM.S3.SECRET_ACCESS_KEY,
                 config=config,
             )
         else:
@@ -104,13 +104,13 @@ class S3StorageProvider(StorageProvider):
             # This supports workload identity (IAM roles for EC2, EKS, etc.)
             self.s3_client = boto3.client(
                 's3',
-                region_name=settings.S3.REGION_NAME,
-                endpoint_url=settings.S3.ENDPOINT_URL,
+                region_name=settings.SYSTEM.S3.REGION_NAME,
+                endpoint_url=settings.SYSTEM.S3.ENDPOINT_URL,
                 config=config,
             )
 
-        self.bucket_name = settings.S3.BUCKET_NAME
-        self.key_prefix = settings.S3.KEY_PREFIX if settings.S3.KEY_PREFIX else ''
+        self.bucket_name = settings.SYSTEM.S3.BUCKET_NAME
+        self.key_prefix = settings.SYSTEM.S3.KEY_PREFIX if settings.SYSTEM.S3.KEY_PREFIX else ''
 
     @staticmethod
     def sanitize_tag_value(s: str) -> str:
@@ -123,7 +123,7 @@ class S3StorageProvider(StorageProvider):
         s3_key = os.path.join(self.key_prefix, filename)
         try:
             self.s3_client.upload_file(file_path, self.bucket_name, s3_key)
-            if settings.S3.ENABLE_TAGGING and tags:
+            if settings.SYSTEM.S3.ENABLE_TAGGING and tags:
                 sanitized_tags = {self.sanitize_tag_value(k): self.sanitize_tag_value(v) for k, v in tags.items()}
                 tagging = {'TagSet': [{'Key': k, 'Value': v} for k, v in sanitized_tags.items()]}
                 self.s3_client.put_object_tagging(
@@ -194,4 +194,4 @@ def get_storage_provider(storage_provider: str):
     return Storage
 
 
-Storage = get_storage_provider(settings.STORAGE_PROVIDER)
+Storage = get_storage_provider(settings.SYSTEM.STORAGE_PROVIDER)

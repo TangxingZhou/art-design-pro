@@ -68,9 +68,9 @@ class AuditLogger:
     logger (Logger): An instance of Loguru’s logger.
     """
 
-    def __init__(self, logger: 'Logger'):
+    def __init__(self, _logger: 'Logger'):
         # self.logger = logger.bind(auditable=True)
-        self.logger = logger
+        self.logger = _logger
 
     def write(
         self,
@@ -105,7 +105,7 @@ class AuditContext:
     metadata (Dict[str, Any]): A dictionary to store additional audit metadata (user, http verb, user agent, etc.).
     """
 
-    def __init__(self, max_body_size: int = settings.AUDIT.MAX_BODY_LOG_SIZE):
+    def __init__(self, max_body_size: int = settings.SYSTEM.AUDIT.MAX_BODY_LOG_SIZE):
         self.request_body = bytearray()
         self.response_body = bytearray()
         self.max_body_size = max_body_size
@@ -133,7 +133,7 @@ class AuditLoggingMiddleware:
         *,
         excluded_paths: Optional[list[str]] = None,
         included_paths: Optional[list[str]] = None,
-        max_body_size: int = settings.AUDIT.MAX_BODY_LOG_SIZE,
+        max_body_size: int = settings.SYSTEM.AUDIT.MAX_BODY_LOG_SIZE,
         audit_level: AuditLevel = AuditLevel.NONE,
         audit_get_requests: bool = False,
     ) -> None:
@@ -214,16 +214,16 @@ class AuditLoggingMiddleware:
         return None
 
     def _should_skip_auditing(self, request: Request) -> bool:
-        if settings.AUDIT.LOG_LEVEL == 'NONE':
+        if settings.SYSTEM.AUDIT.LOG_LEVEL == 'NONE':
             return True
 
         if request.method not in self.audited_methods:
             return True
 
         ALWAYS_LOG_ENDPOINTS = {
-            '/api/v1/auths/signin',
-            '/api/v1/auths/signout',
-            '/api/v1/auths/signup',
+            f'{settings.API_ROOT_PATH}/auths/signin',
+            f'{settings.API_ROOT_PATH}/auths/signout',
+            f'{settings.API_ROOT_PATH}/auths/signup',
         }
         path = request.url.path.lower()
         for endpoint in ALWAYS_LOG_ENDPOINTS:

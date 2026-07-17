@@ -9,27 +9,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-# from open_webui.env import (
-#     DATABASE_ENABLE_IAM_TOKEN_AUTH,
-#     DATABASE_ENABLE_SESSION_SHARING,
-#     DATABASE_ENABLE_SQLITE_WAL,
-#     DATABASE_POOL_MAX_OVERFLOW,
-#     DATABASE_POOL_RECYCLE,
-#     DATABASE_POOL_SIZE,
-#     DATABASE_POOL_TIMEOUT,
-#     DATABASE_SCHEMA,
-#     DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT,
-#     DATABASE_SQLITE_PRAGMA_CACHE_SIZE,
-#     DATABASE_SQLITE_PRAGMA_JOURNAL_SIZE_LIMIT,
-#     DATABASE_SQLITE_PRAGMA_MMAP_SIZE,
-#     DATABASE_SQLITE_PRAGMA_SYNCHRONOUS,
-#     DATABASE_SQLITE_PRAGMA_TEMP_STORE,
-#     DATABASE_URL,
-#     ENABLE_DB_MIGRATIONS,
-#     OPEN_WEBUI_DIR,
-# )
 from config import settings
-from sqlalchemy import Dialect, MetaData, create_engine, event, types
+from sqlalchemy import Dialect, MetaData, create_engine, event, types, text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -446,3 +427,27 @@ async def get_async_db_context(db: AsyncSession | None = None):
     else:
         async with get_async_db() as session:
             yield session
+
+
+def _sync_db_ping() -> None:
+    """Verify the database is reachable with a simple SELECT 1.
+
+    Uses a raw connection from the engine pool instead of the thread-local
+    ScopedSession.  This is necessary because CommitSessionMiddleware
+    deliberately skips healthcheck paths (/health, /ready, /health/db),
+    so any ScopedSession opened on a healthcheck worker thread is never
+    rolled back or removed.  If the session ever enters an invalid state
+    (e.g. after a transient connection error), it stays broken on that
+    thread permanently, causing PendingRollbackError on every subsequent
+    probe — exactly the failure reported in #24605.
+
+    A raw ``engine.connect()`` context manager obtains a fresh connection
+    from the pool, executes the ping, and deterministically returns the
+    connection regardless of success or failure.
+    """
+    with engine.connect() as conn:
+        conn.execute(text('SELECT 1'))
+
+
+async def async_db_ping() -> None:
+    await asyncio.to_thread(_sync_db_ping)

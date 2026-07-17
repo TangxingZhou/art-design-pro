@@ -103,6 +103,6 @@ def get_ssrf_safe_session() -> aiohttp.ClientSession:
     """
     return aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=_SSRFSafeResolver()),
-        timeout=aiohttp.ClientTimeout(total=settings.AIOHTTP.CLIENT_TIMEOUT),
+        timeout=aiohttp.ClientTimeout(total=settings.SYSTEM.AIOHTTP.CLIENT_TIMEOUT),
         trust_env=True,
     )

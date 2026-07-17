@@ -17,34 +17,34 @@ cd "$SCRIPT_DIR" || exit 1
 
 # ── Secret key setup ─────────────────────────────────────────────────────────
 
-KEY_FILE="${WEBUI_SECRET_KEY_FILE:-.webui_secret_key}"
-WEBUI_SECRET_KEY_LENGTH="${WEBUI_SECRET_KEY_LENGTH:-24}"
-PORT="${PORT:-8080}"
+KEY_FILE="${SECRET_KEY_FILE:-.secret_key}"
+SECRET_KEY_LENGTH="${SECRET_KEY_LENGTH:-24}"
+PORT="${PORT:-8000}"
 HOST="${HOST:-0.0.0.0}"
 
-if [[ -z "${WEBUI_SECRET_KEY:-}" && -z "${WEBUI_JWT_SECRET_KEY:-}" ]]; then
-  echo "No WEBUI_SECRET_KEY environment variable set, loading from file."
+if [[ -z "${SECRET_KEY:-}" ]]; then
+  echo "No SECRET_KEY environment variable set, loading from file."
 
   if [[ ! -f "$KEY_FILE" ]]; then
-    echo "Generating new WEBUI_SECRET_KEY..."
-    if ! [[ "$WEBUI_SECRET_KEY_LENGTH" =~ ^[1-9][0-9]*$ ]]; then
-      echo "WEBUI_SECRET_KEY_LENGTH must be a positive integer." >&2
+    echo "Generating new SECRET_KEY..."
+    if ! [[ "$SECRET_KEY_LENGTH" =~ ^[1-9][0-9]*$ ]]; then
+      echo "SECRET_KEY_LENGTH must be a positive integer." >&2
       exit 1
     fi
-    head -c "$WEBUI_SECRET_KEY_LENGTH" /dev/random | base64 > "$KEY_FILE"
+    head -c "$SECRET_KEY_LENGTH" /dev/random | base64 > "$KEY_FILE"
   fi
 
-  echo "Loading WEBUI_SECRET_KEY from ${KEY_FILE}"
-  WEBUI_SECRET_KEY=$(cat "$KEY_FILE")
+  echo "Loading SECRET_KEY from ${KEY_FILE}"
+  SECRET_KEY=$(cat "$KEY_FILE")
 fi
 
 #if [[ -n "${SPACE_ID:-}" ]]; then
 #  if [[ -n "${ADMIN_USER_EMAIL:-}" && -n "${ADMIN_USER_PASSWORD:-}" ]]; then
 #    echo "Creating admin user for Space..."
-#    WEBUI_SECRET_KEY="${WEBUI_SECRET_KEY:-}" \
+#    SECRET_KEY="${SECRET_KEY:-}" \
 #      # uvicorn open_webui.main:app --host "$HOST" --port "$PORT" --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-*}" &
 #      gunicorn -c gunicorn.conf.py &
-#    webui_pid=$!
+#    pid=$!
 #
 #    echo "Waiting for server to become healthy..."
 #    until curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; do
@@ -58,23 +58,13 @@ fi
 #      -d "{\"email\": \"${ADMIN_USER_EMAIL}\", \"password\": \"${ADMIN_USER_PASSWORD}\", \"name\": \"Admin\"}"
 #
 #    echo "Restarting server..."
-#    kill "$webui_pid"
-#    wait "$webui_pid" 2>/dev/null || true
+#    kill "$pid"
+#    wait "$pid" 2>/dev/null || true
 #  fi
 #
 #  export WEBUI_URL="${SPACE_HOST}"
 #fi
 
-# ── Launch gunicorn ───────────────────────────────────────────────────────────
-
-#PYTHON_CMD=$(command -v python3 || command -v python)
-#UVICORN_WORKERS="${UVICORN_WORKERS:-1}"
-#
-#if [[ "$#" -gt 0 ]]; then
-#  ARGS=("$@")
-#else
-#  ARGS=(--workers "$UVICORN_WORKERS")
-#fi
-
-exec env WEBUI_SECRET_KEY="${WEBUI_SECRET_KEY:-}" \
+source .venv/bin/activate
+exec env SECRET_KEY="${SECRET_KEY:-}" \
   "gunicorn -c gunicorn.conf.py"

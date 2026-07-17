@@ -293,7 +293,7 @@ async def update_default_user_permissions(request: Request, form_data: UserPermi
 async def get_default_user_permissions_defaults(user=Depends(get_admin_user)):
     from config import settings
 
-    default_user_permissions = settings.SPEC.DEFAULT_USER_PERMISSIONS
+    default_user_permissions = settings.SYSTEM.DEFAULT_USER_PERMISSIONS
 
     return {
         'workspace': WorkspacePermissions(**default_user_permissions.get('workspace', {})),

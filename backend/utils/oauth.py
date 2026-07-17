@@ -44,62 +44,62 @@ from starlette.responses import RedirectResponse
 
 log = logging.getLogger(__name__)
 
-OAUTH_CLIENT_INFO_ENCRYPTION_KEY = settings.OAUTH.CLIENT_INFO_ENCRYPTION_KEY or settings.SECRET_KEY
+OAUTH_CLIENT_INFO_ENCRYPTION_KEY = settings.SYSTEM.OAUTH.CLIENT_INFO_ENCRYPTION_KEY or settings.SECRET_KEY
 
 OAUTH_RESOURCE_PARAMETER_MODES = {'auto', 'include', 'omit'}
 
 OAUTH_RUNTIME_CONFIG = {
-    'DEFAULT_USER_ROLE': ('ui.default_user_role', settings.OAUTH.DEFAULT_USER_ROLE),
-    'ENABLE_OAUTH_SIGNUP': ('oauth.enable_signup', settings.OAUTH.ENABLE_SIGNUP),
+    'DEFAULT_USER_ROLE': ('ui.default_user_role', settings.SYSTEM.UI.DEFAULT_USER_ROLE),
+    'ENABLE_OAUTH_SIGNUP': ('oauth.enable_signup', settings.SYSTEM.OAUTH.ENABLE_OAUTH_SIGNUP),
     'OAUTH_REFRESH_TOKEN_INCLUDE_SCOPE': (
         'oauth.refresh_token.include_scope',
-        settings.OAUTH.REFRESH_TOKEN_INCLUDE_SCOPE,
+        settings.SYSTEM.OAUTH.REFRESH_TOKEN_INCLUDE_SCOPE,
     ),
     'OAUTH_MERGE_ACCOUNTS_BY_EMAIL': (
         'oauth.merge_accounts_by_email',
-        settings.OAUTH.MERGE_ACCOUNTS_BY_EMAIL,
+        settings.SYSTEM.OAUTH.MERGE_ACCOUNTS_BY_EMAIL,
     ),
     'ENABLE_OAUTH_ROLE_MANAGEMENT': (
         'oauth.enable_role_mapping',
-        settings.OAUTH.ENABLE_ROLE_MANAGEMENT,
+        settings.SYSTEM.OAUTH.ENABLE_ROLE_MANAGEMENT,
     ),
     'ENABLE_OAUTH_GROUP_MANAGEMENT': (
         'oauth.enable_group_mapping',
-        settings.OAUTH.ENABLE_GROUP_MANAGEMENT,
+        settings.SYSTEM.OAUTH.ENABLE_GROUP_MANAGEMENT,
     ),
     'ENABLE_OAUTH_GROUP_CREATION': (
         'oauth.enable_group_creation',
-        settings.OAUTH.ENABLE_GROUP_CREATION,
+        settings.SYSTEM.OAUTH.ENABLE_GROUP_CREATION,
     ),
     'OAUTH_GROUP_DEFAULT_SHARE': (
         'oauth.group_default_share',
-        settings.OAUTH.GROUP_DEFAULT_SHARE,
+        settings.SYSTEM.OAUTH.GROUP_DEFAULT_SHARE,
     ),
-    'OAUTH_BLOCKED_GROUPS': ('oauth.blocked_groups', settings.OAUTH.BLOCKED_GROUPS),
-    'OAUTH_ROLES_CLAIM': ('oauth.roles_claim', settings.OAUTH.ROLES_CLAIM),
-    'OAUTH_SUB_CLAIM': ('oauth.sub_claim', settings.OAUTH.SUB_CLAIM),
-    'OAUTH_GROUPS_CLAIM': ('oauth.group_claim', settings.OAUTH.GROUPS_CLAIM),
-    'OAUTH_EMAIL_CLAIM': ('oauth.email_claim', settings.OAUTH.EMAIL_CLAIM),
-    'OAUTH_PICTURE_CLAIM': ('oauth.picture_claim', settings.OAUTH.PICTURE_CLAIM),
-    'OAUTH_USERNAME_CLAIM': ('oauth.username_claim', settings.OAUTH.USERNAME_CLAIM),
-    'OAUTH_ALLOWED_ROLES': ('oauth.allowed_roles', settings.OAUTH.ALLOWED_ROLES),
-    'OAUTH_ADMIN_ROLES': ('oauth.admin_roles', settings.OAUTH.ADMIN_ROLES),
-    'OAUTH_ALLOWED_DOMAINS': ('oauth.allowed_domains', settings.OAUTH.ALLOWED_DOMAINS),
-    'WEBHOOK_URL': ('webhook_url', settings.WEBHOOK_URL),
-    'JWT_EXPIRES_IN': ('auth.jwt_expiry', settings.JWT_EXPIRES_IN),
+    'OAUTH_BLOCKED_GROUPS': ('oauth.blocked_groups', settings.SYSTEM.OAUTH.BLOCKED_GROUPS),
+    'OAUTH_ROLES_CLAIM': ('oauth.roles_claim', settings.SYSTEM.OAUTH.ROLES_CLAIM),
+    'OAUTH_SUB_CLAIM': ('oauth.sub_claim', settings.SYSTEM.OAUTH.SUB_CLAIM),
+    'OAUTH_GROUPS_CLAIM': ('oauth.group_claim', settings.SYSTEM.OAUTH.GROUPS_CLAIM),
+    'OAUTH_EMAIL_CLAIM': ('oauth.email_claim', settings.SYSTEM.OAUTH.EMAIL_CLAIM),
+    'OAUTH_PICTURE_CLAIM': ('oauth.picture_claim', settings.SYSTEM.OAUTH.PICTURE_CLAIM),
+    'OAUTH_USERNAME_CLAIM': ('oauth.username_claim', settings.SYSTEM.OAUTH.USERNAME_CLAIM),
+    'OAUTH_ALLOWED_ROLES': ('oauth.allowed_roles', settings.SYSTEM.OAUTH.ALLOWED_ROLES),
+    'OAUTH_ADMIN_ROLES': ('oauth.admin_roles', settings.SYSTEM.OAUTH.ADMIN_ROLES),
+    'OAUTH_ALLOWED_DOMAINS': ('oauth.allowed_domains', settings.SYSTEM.OAUTH.ALLOWED_DOMAINS),
+    'WEBHOOK_URL': ('webhook_url', settings.SYSTEM.WEBHOOK_URL),
+    'JWT_EXPIRES_IN': ('auth.jwt_expiry', settings.SYSTEM.AUTH.JWT_EXPIRES_IN),
     'OAUTH_UPDATE_PICTURE_ON_LOGIN': (
         'oauth.update_picture_on_login',
-        settings.OAUTH.UPDATE_PICTURE_ON_LOGIN,
+        settings.SYSTEM.OAUTH.UPDATE_PICTURE_ON_LOGIN,
     ),
     'OAUTH_UPDATE_NAME_ON_LOGIN': (
         'oauth.update_name_on_login',
-        settings.OAUTH.UPDATE_NAME_ON_LOGIN,
+        settings.SYSTEM.OAUTH.UPDATE_NAME_ON_LOGIN,
     ),
     'OAUTH_UPDATE_EMAIL_ON_LOGIN': (
         'oauth.update_email_on_login',
-        settings.OAUTH.UPDATE_EMAIL_ON_LOGIN,
+        settings.SYSTEM.OAUTH.UPDATE_EMAIL_ON_LOGIN,
     ),
-    'OAUTH_AUDIENCE': ('oauth.audience', settings.OAUTH.AUDIENCE),
+    'OAUTH_AUDIENCE': ('oauth.audience', settings.SYSTEM.OAUTH.AUDIENCE),
 }
 
 
@@ -272,7 +272,7 @@ class OAuthManager:
 
         self._clients = {}
 
-        for name, provider_config in settings.OAUTH.PROVIDERS.items():
+        for name, provider_config in settings.SYSTEM.OAUTH.PROVIDERS.items():
             if 'register' not in provider_config:
                 log.error(f'OAuth provider {name} missing register function')
                 continue
@@ -432,7 +432,7 @@ class OAuthManager:
                     token_endpoint,
                     data=refresh_data,
                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                    ssl=settings.AIOHTTP.CLIENT_SESSION_SSL,
+                    ssl=settings.SYSTEM.AIOHTTP.CLIENT_SESSION_SSL,
                 ) as r:
                     if r.status == 200:
                         new_token_data = await r.json()
@@ -495,8 +495,8 @@ class OAuthManager:
                     oauth_roles = claim_data
                 elif isinstance(claim_data, str):
                     # Split by the configured separator if present
-                    if settings.OAUTH.ROLES_SEPARATOR and settings.OAUTH.ROLES_SEPARATOR in claim_data:
-                        oauth_roles = claim_data.split(settings.OAUTH.ROLES_SEPARATOR)
+                    if settings.SYSTEM.OAUTH.ROLES_SEPARATOR and settings.SYSTEM.OAUTH.ROLES_SEPARATOR in claim_data:
+                        oauth_roles = claim_data.split(settings.SYSTEM.OAUTH.ROLES_SEPARATOR)
                     else:
                         oauth_roles = [claim_data]
                 elif isinstance(claim_data, int):
@@ -564,8 +564,8 @@ class OAuthManager:
                 user_oauth_groups = claim_data
             elif isinstance(claim_data, str):
                 # Split by the configured separator if present
-                if settings.OAUTH.GROUPS_SEPARATOR in claim_data:
-                    user_oauth_groups = claim_data.split(settings.OAUTH.GROUPS_SEPARATOR)
+                if settings.SYSTEM.OAUTH.GROUPS_SEPARATOR in claim_data:
+                    user_oauth_groups = claim_data.split(settings.SYSTEM.OAUTH.GROUPS_SEPARATOR)
                 else:
                     user_oauth_groups = [claim_data]
             else:
@@ -700,8 +700,8 @@ class OAuthManager:
                 async with session.get(
                     picture_url,
                     **get_kwargs,
-                    ssl=settings.AIOHTTP.CLIENT_SESSION_SSL,
-                    allow_redirects=settings.AIOHTTP.CLIENT_ALLOW_REDIRECTS,
+                    ssl=settings.SYSTEM.AIOHTTP.CLIENT_SESSION_SSL,
+                    allow_redirects=settings.SYSTEM.AIOHTTP.CLIENT_ALLOW_REDIRECTS,
                 ) as resp:
                     if resp.ok:
                         upstream_mime = (resp.headers.get('Content-Type', '') or '').split(';', 1)[0].strip().lower()
@@ -724,7 +724,7 @@ class OAuthManager:
 
     async def handle_login(self, request, provider):
         auth_config = await get_oauth_runtime_config()
-        if provider not in settings.OAUTH.PROVIDERS:
+        if provider not in settings.SYSTEM.OAUTH.PROVIDERS:
             raise HTTPException(404)
         # If the provider has a custom redirect URL, use that, otherwise automatically generate one
         client = self.get_client(provider)
@@ -737,14 +737,14 @@ class OAuthManager:
         kwargs = {}
         if auth_config.OAUTH_AUDIENCE:
             kwargs['audience'] = auth_config.OAUTH_AUDIENCE
-        if settings.OAUTH.AUTHORIZE_PARAMS:
-            kwargs.update(settings.OAUTH.AUTHORIZE_PARAMS)
+        if settings.SYSTEM.OAUTH.AUTHORIZE_PARAMS:
+            kwargs.update(settings.SYSTEM.OAUTH.AUTHORIZE_PARAMS)
 
         return await client.authorize_redirect(request, redirect_uri, **kwargs)
 
     async def handle_callback(self, request, provider, response, db=None):
         auth_config = await get_oauth_runtime_config()
-        if provider not in settings.OAUTH.PROVIDERS:
+        if provider not in settings.SYSTEM.OAUTH.PROVIDERS:
             raise HTTPException(404)
 
         error_message = None
@@ -754,7 +754,7 @@ class OAuthManager:
             auth_params = {}
 
             if client:
-                if hasattr(client, 'client_id') and settings.OAUTH.ACCESS_TOKEN_REQUEST_INCLUDE_CLIENT_ID:
+                if hasattr(client, 'client_id') and settings.SYSTEM.OAUTH.ACCESS_TOKEN_REQUEST_INCLUDE_CLIENT_ID:
                     auth_params['client_id'] = client.client_id
 
             try:
@@ -818,7 +818,7 @@ class OAuthManager:
                 sub = user_data.get(auth_config.OAUTH_SUB_CLAIM)
             else:
                 # Fallback to the default sub claim if not configured
-                sub = user_data.get(settings.OAUTH.PROVIDERS[provider].get('sub_claim', 'sub'))
+                sub = user_data.get(settings.SYSTEM.OAUTH.PROVIDERS[provider].get('sub_claim', 'sub'))
             if not sub:
                 log.warning(f'OAuth callback failed, sub is missing: {user_data}')
                 raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
@@ -842,7 +842,7 @@ class OAuthManager:
                             async with session.get(
                                 'https://api.github.com/user/emails',
                                 headers=headers,
-                                ssl=settings.AIOHTTP.CLIENT_SESSION_SSL,
+                                ssl=settings.SYSTEM.AIOHTTP.CLIENT_SESSION_SSL,
                             ) as resp:
                                 if resp.ok:
                                     emails = await resp.json()
@@ -862,7 +862,7 @@ class OAuthManager:
                     except Exception as e:
                         log.warning(f'Error fetching GitHub email: {e}')
                         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
-                elif settings.OAUTH.ENABLE_EMAIL_FALLBACK:
+                elif settings.SYSTEM.OAUTH.ENABLE_EMAIL_FALLBACK:
                     email = f'{provider}@{sub}.local'
                 else:
                     log.warning(f'OAuth callback failed, email is missing: {user_data}')
@@ -926,7 +926,7 @@ class OAuthManager:
                     if picture_claim:
                         new_picture_url = user_data.get(
                             picture_claim,
-                            settings.OAUTH.PROVIDERS[provider].get('picture_url', ''),
+                            settings.SYSTEM.OAUTH.PROVIDERS[provider].get('picture_url', ''),
                         )
                         processed_picture_url = await self._process_picture_url(
                             new_picture_url, token.get('access_token')
@@ -946,7 +946,7 @@ class OAuthManager:
                     if picture_claim:
                         picture_url = user_data.get(
                             picture_claim,
-                            settings.OAUTH.PROVIDERS[provider].get('picture_url', ''),
+                            settings.SYSTEM.OAUTH.PROVIDERS[provider].get('picture_url', ''),
                         )
                         picture_url = await self._process_picture_url(picture_url, token.get('access_token'))
                     else:
@@ -1035,19 +1035,19 @@ class OAuthManager:
             key='token',
             value=jwt_token,
             httponly=False,  # Required for frontend access
-            samesite=settings.AUTH.COOKIE_SAME_SITE,
-            secure=settings.AUTH.COOKIE_SECURE,
+            samesite=settings.SYSTEM.AUTH.COOKIE_SAME_SITE,
+            secure=settings.SYSTEM.AUTH.COOKIE_SECURE,
             **({'max_age': cookie_max_age} if cookie_max_age is not None else {}),
         )
 
         # Legacy cookies for compatibility with older frontend versions
-        if settings.OAUTH.ENABLE_ID_TOKEN_COOKIE:
+        if settings.SYSTEM.OAUTH.ENABLE_ID_TOKEN_COOKIE:
             response.set_cookie(
                 key='oauth_id_token',
                 value=token.get('id_token'),
                 httponly=True,
-                samesite=settings.AUTH.COOKIE_SAME_SITE,
-                secure=settings.AUTH.COOKIE_SECURE,
+                samesite=settings.SYSTEM.AUTH.COOKIE_SAME_SITE,
+                secure=settings.SYSTEM.AUTH.COOKIE_SECURE,
                 **({'max_age': cookie_max_age} if cookie_max_age is not None else {}),
             )
 
@@ -1063,8 +1063,8 @@ class OAuthManager:
                 reverse=True,
             )
             # Keep the newest sessions up to the limit, prune the rest
-            if len(provider_sessions) >= settings.OAUTH.MAX_SESSIONS_PER_USER:
-                for old_session in provider_sessions[settings.OAUTH.MAX_SESSIONS_PER_USER - 1 :]:
+            if len(provider_sessions) >= settings.SYSTEM.OAUTH.MAX_SESSIONS_PER_USER:
+                for old_session in provider_sessions[settings.SYSTEM.OAUTH.MAX_SESSIONS_PER_USER - 1 :]:
                     await OAuthSessions.delete_session_by_id(old_session.id, db=db)
 
             session = await OAuthSessions.create_session(
@@ -1079,8 +1079,8 @@ class OAuthManager:
                     key='oauth_session_id',
                     value=session.id,
                     httponly=True,
-                    samesite=settings.AUTH.COOKIE_SAME_SITE,
-                    secure=settings.AUTH.COOKIE_SECURE,
+                    samesite=settings.SYSTEM.AUTH.COOKIE_SAME_SITE,
+                    secure=settings.SYSTEM.AUTH.COOKIE_SECURE,
                     **({'max_age': cookie_max_age} if cookie_max_age is not None else {}),
                 )
 
@@ -1138,14 +1138,14 @@ class OAuthManager:
         matched_jwks_uri = None
         matched_issuer = None
 
-        for provider_name in settings.OAUTH.PROVIDERS:
+        for provider_name in settings.SYSTEM.OAUTH.PROVIDERS:
             server_metadata_url = self.get_server_metadata_url(provider_name)
             if not server_metadata_url:
                 continue
 
             try:
                 async with aiohttp.ClientSession(trust_env=True) as session:
-                    async with session.get(server_metadata_url, ssl=settings.AIOHTTP.CLIENT_SESSION_SSL) as r:
+                    async with session.get(server_metadata_url, ssl=settings.SYSTEM.AIOHTTP.CLIENT_SESSION_SSL) as r:
                         if r.status != 200:
                             continue
                         oidc_config = await r.json()

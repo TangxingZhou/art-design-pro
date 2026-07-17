@@ -98,23 +98,10 @@ ADMIN_CONFIG_KEYS = {
     'DEFAULT_USER_ROLE': 'ui.default_user_role',
     'DEFAULT_GROUP_ID': 'ui.default_group_id',
     'JWT_EXPIRES_IN': 'auth.jwt_expiry',
-    'ENABLE_COMMUNITY_SHARING': 'ui.enable_community_sharing',
-    'ENABLE_MESSAGE_RATING': 'ui.enable_message_rating',
     'ENABLE_FOLDERS': 'folders.enable',
     'FOLDER_MAX_FILE_COUNT': 'folders.max_file_count',
-    'AUTOMATION_MAX_COUNT': 'automations.max_count',
-    'AUTOMATION_MIN_INTERVAL': 'automations.min_interval',
-    'ENABLE_AUTOMATIONS': 'automations.enable',
-    'ENABLE_CHANNELS': 'channels.enable',
-    'ENABLE_CALENDAR': 'calendar.enable',
-    'ENABLE_MEMORIES': 'memories.enable',
-    'ENABLE_MEMORY_SYSTEM_CONTEXT': 'memories.system_context.enable',
-    'ENABLE_NOTES': 'notes.enable',
     'ENABLE_USER_WEBHOOKS': 'ui.enable_user_webhooks',
     'ENABLE_USER_STATUS': 'users.enable_status',
-    'PENDING_USER_OVERLAY_TITLE': 'ui.pending_user_overlay_title',
-    'PENDING_USER_OVERLAY_CONTENT': 'ui.pending_user_overlay_content',
-    'RESPONSE_WATERMARK': 'ui.watermark',
 }
 
 LDAP_SERVER_CONFIG_KEYS = {
@@ -180,8 +167,8 @@ async def create_session_response(
             value=token,
             expires=datetime_expires_at,
             httponly=True,
-            samesite=settings.AUTH.COOKIE_SAME_SITE,
-            secure=settings.AUTH.COOKIE_SECURE,
+            samesite=settings.SYSTEM.AUTH.COOKIE_SAME_SITE,
+            secure=settings.SYSTEM.AUTH.COOKIE_SECURE,
             **({'max_age': max_age} if max_age is not None else {}),
         )
 
@@ -262,8 +249,8 @@ async def get_session_user(
             value=token,
             expires=(datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc) if expires_at else None),
             httponly=True,  # Ensures the cookie is not accessible via JavaScript
-            samesite=settings.AUTH.COOKIE_SAME_SITE,
-            secure=settings.AUTH.COOKIE_SECURE,
+            samesite=settings.SYSTEM.AUTH.COOKIE_SAME_SITE,
+            secure=settings.SYSTEM.AUTH.COOKIE_SECURE,
             **({'max_age': max_age} if max_age is not None else {}),
         )
 
@@ -370,7 +357,7 @@ async def update_password(
     db: AsyncSession = Depends(get_async_session),
 ):
     # Trusted-header auth mode delegates passwords to the reverse proxy
-    if settings.AUTH.TRUSTED_EMAIL_HEADER:
+    if settings.SYSTEM.AUTH.TRUSTED_EMAIL_HEADER:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.ACTION_PROHIBITED)
     if session_user:
         user = await Auths.authenticate_user(
@@ -668,16 +655,16 @@ async def signin(
 
     auth_source = 'password'
 
-    if settings.AUTH.TRUSTED_EMAIL_HEADER:
+    if settings.SYSTEM.AUTH.TRUSTED_EMAIL_HEADER:
         auth_source = 'trusted_header'
-        if settings.AUTH.TRUSTED_EMAIL_HEADER not in request.headers:
+        if settings.SYSTEM.AUTH.TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
 
-        email = request.headers[settings.AUTH.TRUSTED_EMAIL_HEADER].lower()
+        email = request.headers[settings.SYSTEM.AUTH.TRUSTED_EMAIL_HEADER].lower()
         name = email
 
-        if settings.AUTH.TRUSTED_NAME_HEADER:
-            name = request.headers.get(settings.AUTH.TRUSTED_NAME_HEADER, email)
+        if settings.SYSTEM.AUTH.TRUSTED_NAME_HEADER:
+            name = request.headers.get(settings.SYSTEM.AUTH.TRUSTED_NAME_HEADER, email)
             try:
                 name = urllib.parse.unquote(name, encoding='utf-8')
             except Exception as e:
@@ -695,22 +682,22 @@ async def signin(
 
         user = await Auths.authenticate_user_by_email(email, db=db)
         if user:
-            if settings.AUTH.TRUSTED_GROUPS_HEADER:
-                group_names = request.headers.get(settings.AUTH.TRUSTED_GROUPS_HEADER, '').split(',')
+            if settings.SYSTEM.AUTH.TRUSTED_GROUPS_HEADER:
+                group_names = request.headers.get(settings.SYSTEM.AUTH.TRUSTED_GROUPS_HEADER, '').split(',')
                 group_names = [name.strip() for name in group_names if name.strip()]
 
                 if group_names:
                     await Groups.sync_groups_by_group_names(user.id, group_names, db=db)
 
-            if settings.AUTH.TRUSTED_ROLE_HEADER:
-                trusted_role = request.headers.get(settings.AUTH.TRUSTED_ROLE_HEADER, '').lower().strip()
+            if settings.SYSTEM.AUTH.TRUSTED_ROLE_HEADER:
+                trusted_role = request.headers.get(settings.SYSTEM.AUTH.TRUSTED_ROLE_HEADER, '').lower().strip()
                 if trusted_role in {'admin', 'user', 'pending'}:
                     if user.role != trusted_role:
                         await Users.update_user_role_by_id(user.id, trusted_role, db=db)
                 elif trusted_role:
                     log.warning(f'Ignoring invalid trusted role header value: {trusted_role}')
 
-    elif not settings.ENABLE_AUTH:
+    elif not settings.SYSTEM.AUTH.ENABLE:
         auth_source = 'system'
         admin_email = 'admin@localhost'
         admin_password = 'admin'
@@ -830,12 +817,12 @@ async def signup(
 ):
     has_users = await Users.has_users(db=db)
 
-    if settings.ENABLE_AUTH:
+    if settings.SYSTEM.AUTH.ENABLE:
         if has_users:
             if not await Config.get('ui.enable_signup') or not await Config.get('ui.enable_login_form'):
                 raise HTTPException(status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
         # Don't gate the first admin on ENABLE_SIGNUP: it auto-disables and can persist stale across a DB reset.
-        elif not await Config.get('ui.enable_login_form') and not settings.AUTH.ENABLE_INITIAL_ADMIN_SIGNUP:
+        elif not await Config.get('ui.enable_login_form') and not settings.SYSTEM.AUTH.ENABLE_INITIAL_ADMIN_SIGNUP:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
     else:
         if has_users:
@@ -935,7 +922,7 @@ async def signout(request: Request, response: Response, db: AsyncSession = Depen
             oauth_id_token = session.token.get('id_token')
             try:
                 async with ClientSession(trust_env=True) as session:
-                    async with session.get(oauth_server_metadata_url, ssl=settings.AIOHTTP.CLIENT_SESSION_SSL) as r:
+                    async with session.get(oauth_server_metadata_url, ssl=settings.SYSTEM.AIOHTTP.CLIENT_SESSION_SSL) as r:
                         if r.status == 200:
                             openid_data = await r.json()
                             logout_url = openid_data.get('end_session_endpoint')
@@ -947,8 +934,8 @@ async def signout(request: Request, response: Response, db: AsyncSession = Depen
                                         'status': True,
                                         'redirect_url': f'{logout_url}?id_token_hint={oauth_id_token}'
                                         + (
-                                            f'&post_logout_redirect_uri={settings.AUTH.SIGNOUT_REDIRECT_URL}'
-                                            if settings.AUTH.SIGNOUT_REDIRECT_URL
+                                            f'&post_logout_redirect_uri={settings.SYSTEM.AUTH.SIGNOUT_REDIRECT_URL}'
+                                            if settings.SYSTEM.AUTH.SIGNOUT_REDIRECT_URL
                                             else ''
                                         ),
                                     },
@@ -965,12 +952,12 @@ async def signout(request: Request, response: Response, db: AsyncSession = Depen
                     headers=response.headers,
                 )
 
-    if settings.AUTH.SIGNOUT_REDIRECT_URL:
+    if settings.SYSTEM.AUTH.SIGNOUT_REDIRECT_URL:
         return JSONResponse(
             status_code=200,
             content={
                 'status': True,
-                'redirect_url': settings.AUTH.SIGNOUT_REDIRECT_URL,
+                'redirect_url': settings.SYSTEM.AUTH.SIGNOUT_REDIRECT_URL,
             },
             headers=response.headers,
         )
@@ -1136,33 +1123,20 @@ class AdminConfig(BaseModel):
     DEFAULT_USER_ROLE: str
     DEFAULT_GROUP_ID: str
     JWT_EXPIRES_IN: str
-    ENABLE_COMMUNITY_SHARING: bool
-    ENABLE_MESSAGE_RATING: bool
     ENABLE_FOLDERS: bool
     FOLDER_MAX_FILE_COUNT: int | str | None = None
-    AUTOMATION_MAX_COUNT: int | str | None = None
-    AUTOMATION_MIN_INTERVAL: int | str | None = None
-    ENABLE_AUTOMATIONS: bool
-    ENABLE_CHANNELS: bool
-    ENABLE_CALENDAR: bool
-    ENABLE_MEMORIES: bool
-    ENABLE_MEMORY_SYSTEM_CONTEXT: bool
-    ENABLE_NOTES: bool
     ENABLE_USER_WEBHOOKS: bool
     ENABLE_USER_STATUS: bool
-    PENDING_USER_OVERLAY_TITLE: str | None = None
-    PENDING_USER_OVERLAY_CONTENT: str | None = None
-    RESPONSE_WATERMARK: str | None = None
 
 
 @router.post('/admin/config')
 async def update_admin_config(request: Request, form_data: AdminConfig, user=Depends(get_admin_user)):
     updates = config_updates(form_data.model_dump(), ADMIN_CONFIG_KEYS)
     updates['folders.max_file_count'] = int(form_data.FOLDER_MAX_FILE_COUNT) if form_data.FOLDER_MAX_FILE_COUNT else ''
-    updates['automations.max_count'] = int(form_data.AUTOMATION_MAX_COUNT) if form_data.AUTOMATION_MAX_COUNT else ''
-    updates['automations.min_interval'] = (
-        int(form_data.AUTOMATION_MIN_INTERVAL) if form_data.AUTOMATION_MIN_INTERVAL else ''
-    )
+    # updates['automations.max_count'] = int(form_data.AUTOMATION_MAX_COUNT) if form_data.AUTOMATION_MAX_COUNT else ''
+    # updates['automations.min_interval'] = (
+    #     int(form_data.AUTOMATION_MIN_INTERVAL) if form_data.AUTOMATION_MIN_INTERVAL else ''
+    # )
 
     if form_data.DEFAULT_USER_ROLE not in ['pending', 'user', 'admin']:
         updates.pop('ui.default_user_role', None)
@@ -1464,7 +1438,7 @@ async def token_exchange(
     Exchange an external OAuth provider token for an OpenWebUI JWT.
     This endpoint is disabled by default. Set OATH.ENABLE_TOKEN_EXCHANGE=True to enable.
     """
-    if not settings.OAUTH.ENABLE_TOKEN_EXCHANGE:
+    if not settings.SYSTEM.OAUTH.ENABLE_TOKEN_EXCHANGE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Token exchange is disabled',
@@ -1473,7 +1447,7 @@ async def token_exchange(
     provider = provider.lower()
 
     # Check if provider is configured
-    if provider not in settings.OAUTH.PROVIDERS:
+    if provider not in settings.SYSTEM.OAUTH.PROVIDERS:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ERROR_MESSAGES.OAUTH_NOT_CONFIGURED(provider),
@@ -1509,7 +1483,7 @@ async def token_exchange(
 
     # Get sub claim
     sub_claim = await Config.get('oauth.sub_claim')
-    sub = user_data.get(sub_claim or settings.OAUTH.PROVIDERS[provider].get('sub_claim', 'sub'))
+    sub = user_data.get(sub_claim or settings.SYSTEM.OAUTH.PROVIDERS[provider].get('sub_claim', 'sub'))
     if not sub:
         log.warning(f'Token exchange failed: sub claim missing from user data')
         raise HTTPException(

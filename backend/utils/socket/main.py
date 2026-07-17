@@ -3,49 +3,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import sys
 import time
-from typing import Dict
 
-import pycrdt as Y
 import socketio
-# from open_webui.config import (
-#     CORS_ALLOW_ORIGIN,
-# )
-# from open_webui.env import (
-#     ENABLE_WEBSOCKET_SUPPORT,
-#     GLOBAL_LOG_LEVEL,
-#     REDIS_KEY_PREFIX,
-#     VERSION,
-#     WEBSOCKET_EVENT_CALLER_TIMEOUT,
-#     WEBSOCKET_MANAGER,
-#     WEBSOCKET_REDIS_CLUSTER,
-#     WEBSOCKET_REDIS_LOCK_TIMEOUT,
-#     WEBSOCKET_REDIS_OPTIONS,
-#     WEBSOCKET_REDIS_URL,
-#     WEBSOCKET_SENTINEL_HOSTS,
-#     WEBSOCKET_SENTINEL_PORT,
-#     WEBSOCKET_SERVER_ENGINEIO_LOGGING,
-#     WEBSOCKET_SERVER_LOGGING,
-#     WEBSOCKET_SERVER_PING_INTERVAL,
-#     WEBSOCKET_SERVER_PING_TIMEOUT,
-# )
 from config import settings
-from models.access_grants import AccessGrants
-# from models.channels import Channels
-# from models.chats import Chats
-# from open_webui.models.notes import Notes, NoteUpdateForm
-from models.users import UserNameResponse, Users
-from utils.socket.utils import RedisDict, RedisLock, YdocManager
-from utils.tasks import create_task, stop_item_tasks
-from utils.access_control import has_permission
+from models.users import Users
+from utils.socket.utils import RedisDict, RedisLock
 from utils.auth import decode_token, is_valid_token
 from utils.redis import (
     build_sentinel_url,
     get_redis_connection,
     get_sentinels_from_env,
 )
-from redis import asyncio as aioredis
 
 # logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
@@ -58,38 +27,38 @@ REDIS = None
 # Configure CORS for Socket.IO
 SOCKETIO_CORS_ORIGINS = '*' if settings.CORS_ALLOW_ORIGINS == ['*'] else settings.CORS_ALLOW_ORIGINS
 
-if settings.WEBSOCKET.MANAGER == 'redis':
-    sentinel_hosts = settings.WEBSOCKET.SENTINEL_HOSTS or ''
+if settings.SYSTEM.WEBSOCKET.MANAGER == 'redis':
+    sentinel_hosts = settings.SYSTEM.WEBSOCKET.SENTINEL_HOSTS or ''
     ws_redis_url = (
-        build_sentinel_url(settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL, sentinel_hosts, settings.WEBSOCKET.SENTINEL_PORT)
+        build_sentinel_url(settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL, sentinel_hosts, settings.SYSTEM.WEBSOCKET.SENTINEL_PORT)
         if sentinel_hosts
-        else (settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL)
+        else (settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL)
     )
-    settings.WEBSOCKET.REDIS_OPTIONS['socket_connect_timeout'] = settings.REDIS.SOCKET_CONNECT_TIMEOUT is not None
-    redis_manager = socketio.AsyncRedisManager(ws_redis_url, redis_options=settings.WEBSOCKET.REDIS_OPTIONS)
+    settings.SYSTEM.WEBSOCKET.REDIS_OPTIONS['socket_connect_timeout'] = settings.REDIS.SOCKET_CONNECT_TIMEOUT is not None
+    redis_manager = socketio.AsyncRedisManager(ws_redis_url, redis_options=settings.SYSTEM.WEBSOCKET.REDIS_OPTIONS)
     sio = socketio.AsyncServer(
         cors_allowed_origins=SOCKETIO_CORS_ORIGINS,
         async_mode='asgi',
-        transports=(['websocket'] if settings.ENABLE_WEBSOCKET else ['polling']),
-        allow_upgrades=settings.ENABLE_WEBSOCKET,
+        transports=(['websocket'] if settings.SYSTEM.WEBSOCKET.ENABLE else ['polling']),
+        allow_upgrades=settings.SYSTEM.WEBSOCKET.ENABLE,
         always_connect=True,
         client_manager=redis_manager,
-        logger=settings.WEBSOCKET.SERVER_LOGGING,
-        ping_interval=settings.WEBSOCKET.SERVER_PING_INTERVAL,
-        ping_timeout=settings.WEBSOCKET.SERVER_PING_TIMEOUT,
-        engineio_logger=settings.WEBSOCKET.SERVER_ENGINEIO_LOGGING,
+        logger=settings.SYSTEM.WEBSOCKET.SERVER_LOGGING,
+        ping_interval=settings.SYSTEM.WEBSOCKET.SERVER_PING_INTERVAL,
+        ping_timeout=settings.SYSTEM.WEBSOCKET.SERVER_PING_TIMEOUT,
+        engineio_logger=settings.SYSTEM.WEBSOCKET.SERVER_ENGINEIO_LOGGING,
     )
 else:
     sio = socketio.AsyncServer(
         cors_allowed_origins=SOCKETIO_CORS_ORIGINS,
         async_mode='asgi',
-        transports=(['websocket'] if settings.ENABLE_WEBSOCKET else ['polling']),
-        allow_upgrades=settings.ENABLE_WEBSOCKET,
+        transports=(['websocket'] if settings.SYSTEM.WEBSOCKET.ENABLE else ['polling']),
+        allow_upgrades=settings.SYSTEM.WEBSOCKET.ENABLE,
         always_connect=True,
-        logger=settings.WEBSOCKET.SERVER_LOGGING,
-        ping_interval=settings.WEBSOCKET.SERVER_PING_INTERVAL,
-        ping_timeout=settings.WEBSOCKET.SERVER_PING_TIMEOUT,
-        engineio_logger=settings.WEBSOCKET.SERVER_ENGINEIO_LOGGING,
+        logger=settings.SYSTEM.WEBSOCKET.SERVER_LOGGING,
+        ping_interval=settings.SYSTEM.WEBSOCKET.SERVER_PING_INTERVAL,
+        ping_timeout=settings.SYSTEM.WEBSOCKET.SERVER_PING_TIMEOUT,
+        engineio_logger=settings.SYSTEM.WEBSOCKET.SERVER_ENGINEIO_LOGGING,
     )
 
 
@@ -99,53 +68,53 @@ SESSION_POOL_TIMEOUT = 120  # seconds without heartbeat before session is reaped
 
 # Dictionary to maintain the user pool
 
-if settings.WEBSOCKET.MANAGER == 'redis':
+if settings.SYSTEM.WEBSOCKET.MANAGER == 'redis':
     log.debug('Using Redis to manage websockets.')
-    ws_sentinels = get_sentinels_from_env(settings.WEBSOCKET.SENTINEL_HOSTS, settings.WEBSOCKET.SENTINEL_PORT)
+    ws_sentinels = get_sentinels_from_env(settings.SYSTEM.WEBSOCKET.SENTINEL_HOSTS, settings.SYSTEM.WEBSOCKET.SENTINEL_PORT)
     REDIS = get_redis_connection(
-        redis_url=settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
+        redis_url=settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
         redis_sentinels=ws_sentinels,
-        redis_cluster=settings.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
+        redis_cluster=settings.SYSTEM.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
         async_mode=True,
     )
 
     MODELS = RedisDict(
         f'{settings.REDIS.KEY_PREFIX}:models',
-        redis_url=settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
+        redis_url=settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
         redis_sentinels=ws_sentinels,
-        redis_cluster=settings.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
+        redis_cluster=settings.SYSTEM.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
     )
 
     SESSION_POOL = RedisDict(
         f'{settings.REDIS.KEY_PREFIX}:session_pool',
-        redis_url=settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
+        redis_url=settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
         redis_sentinels=ws_sentinels,
-        redis_cluster=settings.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
+        redis_cluster=settings.SYSTEM.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
     )
     USAGE_POOL = RedisDict(
         f'{settings.REDIS.KEY_PREFIX}:usage_pool',
-        redis_url=settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
+        redis_url=settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
         redis_sentinels=ws_sentinels,
-        redis_cluster=settings.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
+        redis_cluster=settings.SYSTEM.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
     )
 
     clean_up_lock = RedisLock(
-        redis_url=settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
+        redis_url=settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
         lock_name=f'{settings.REDIS.KEY_PREFIX}:usage_cleanup_lock',
-        timeout_secs=settings.WEBSOCKET.REDIS_LOCK_TIMEOUT,
+        timeout_secs=settings.SYSTEM.WEBSOCKET.REDIS_LOCK_TIMEOUT,
         redis_sentinels=ws_sentinels,
-        redis_cluster=settings.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
+        redis_cluster=settings.SYSTEM.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
     )
     aquire_func = clean_up_lock.aquire_lock
     renew_func = clean_up_lock.renew_lock
     release_func = clean_up_lock.release_lock
 
     session_cleanup_lock = RedisLock(
-        redis_url=settings.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
+        redis_url=settings.SYSTEM.WEBSOCKET.REDIS_URL or settings.REDIS.URL,
         lock_name=f'{settings.REDIS.KEY_PREFIX}:session_cleanup_lock',
-        timeout_secs=settings.WEBSOCKET.REDIS_LOCK_TIMEOUT,
+        timeout_secs=settings.SYSTEM.WEBSOCKET.REDIS_LOCK_TIMEOUT,
         redis_sentinels=ws_sentinels,
-        redis_cluster=settings.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
+        redis_cluster=settings.SYSTEM.WEBSOCKET.REDIS_CLUSTER or settings.REDIS.CLUSTER,
     )
     session_aquire_func = session_cleanup_lock.aquire_lock
     session_renew_func = session_cleanup_lock.renew_lock
@@ -158,12 +127,6 @@ else:
 
     aquire_func = release_func = renew_func = lambda: True
     session_aquire_func = session_release_func = session_renew_func = lambda: True
-
-
-YDOC_MANAGER = YdocManager(
-    redis=REDIS,
-    redis_key_prefix=f'{settings.REDIS.KEY_PREFIX}:ydoc:documents',
-)
 
 
 async def periodic_session_pool_cleanup():
@@ -191,7 +154,7 @@ async def periodic_session_pool_cleanup():
 
 async def periodic_usage_pool_cleanup():
     max_retries = 2
-    retry_delay = random.uniform(settings.WEBSOCKET.REDIS_LOCK_TIMEOUT / 2, settings.WEBSOCKET.REDIS_LOCK_TIMEOUT)
+    retry_delay = random.uniform(settings.SYSTEM.WEBSOCKET.REDIS_LOCK_TIMEOUT / 2, settings.SYSTEM.WEBSOCKET.REDIS_LOCK_TIMEOUT)
     for attempt in range(max_retries + 1):
         if aquire_func():
             break
@@ -419,432 +382,23 @@ async def heartbeat(sid, data):
         await Users.update_last_active_by_id(user['id'])
 
 
-# @sio.on('join-channels')
-# async def join_channel(sid, data):
-#     auth = data['auth'] if 'auth' in data else None
-#     if not auth or 'token' not in auth:
-#         return
-#
-#     environ = sio.get_environ(sid) or {}
-#     scope = environ.get('asgi.scope') or {}
-#     fastapi_app = scope.get('app')
-#     redis = getattr(getattr(fastapi_app, 'state', None), 'redis', None) or REDIS
-#     data = decode_token(auth['token'])
-#     if data is None or 'id' not in data or not await is_valid_token(data, redis):
-#         return
-#
-#     user = await Users.get_user_by_id(data['id'])
-#     if not user:
-#         return
-#
-#     # Join all the channels only if user has channels permission
-#     if user.role == 'admin' or await has_permission(user.id, 'features.channels'):
-#         channels = await Channels.get_channels_by_user_id(user.id)
-#         log.debug(f'{channels=}')
-#         for channel in channels:
-#             await sio.enter_room(sid, f'channel:{channel.id}')
-#
-#
-# @sio.on('join-note')
-# async def join_note(sid, data):
-#     auth = data['auth'] if 'auth' in data else None
-#     if not auth or 'token' not in auth:
-#         return
-#
-#     environ = sio.get_environ(sid) or {}
-#     scope = environ.get('asgi.scope') or {}
-#     fastapi_app = scope.get('app')
-#     redis = getattr(getattr(fastapi_app, 'state', None), 'redis', None) or REDIS
-#     token_data = decode_token(auth['token'])
-#     if token_data is None or 'id' not in token_data or not await is_valid_token(token_data, redis):
-#         return
-#
-#     user = await Users.get_user_by_id(token_data['id'])
-#     if not user:
-#         return
-#
-#     note = await Notes.get_note_by_id(data['note_id'])
-#     if not note:
-#         log.error(f'Note {data["note_id"]} not found for user {user.id}')
-#         return
-#
-#     if (
-#         user.role != 'admin'
-#         and user.id != note.user_id
-#         and not await AccessGrants.has_access(
-#             user_id=user.id,
-#             resource_type='note',
-#             resource_id=note.id,
-#             permission='read',
-#         )
-#     ):
-#         log.error(f'User {user.id} does not have access to note {data["note_id"]}')
-#         return
-#
-#     log.debug(f'Joining note {note.id} for user {user.id}')
-#     await sio.enter_room(sid, f'note:{note.id}')
-#
-#
-# @sio.on('events:channel')
-# async def channel_events(sid, data):
-#     room = f'channel:{data["channel_id"]}'
-#     participants = sio.manager.get_participants(
-#         namespace='/',
-#         room=room,
-#     )
-#
-#     sids = [sid for sid, _ in participants]
-#     if sid not in sids:
-#         return
-#
-#     event_data = data['data']
-#     event_type = event_data['type']
-#
-#     user = SESSION_POOL.get(sid)
-#
-#     if not user:
-#         return
-#
-#     if event_type == 'typing':
-#         await sio.emit(
-#             'events:channel',
-#             {
-#                 'channel_id': data['channel_id'],
-#                 'message_id': data.get('message_id', None),
-#                 'data': event_data,
-#                 'user': UserNameResponse(**user).model_dump(),
-#             },
-#             room=room,
-#         )
-#     elif event_type == 'last_read_at':
-#         await Channels.update_member_last_read_at(data['channel_id'], user['id'])
-#
-#
-# @sio.on('events:chat')
-# async def chat_events(sid, data):
-#     user = SESSION_POOL.get(sid)
-#     if not user:
-#         return
-#
-#     event_data = data.get('data', {})
-#     event_type = event_data.get('type')
-#
-#     if event_type == 'last_read_at':
-#         await Chats.update_chat_last_read_at_by_id(data['chat_id'], user['id'])
-
-
-# def normalize_document_id(document_id: str) -> str:
-#     """Canonicalize document IDs to prevent auth bypass via prefix variants.
-#
-#     YdocManager normalizes storage keys by replacing ":" with "_", so
-#     "note_abc" and "note:abc" resolve to the same underlying document.
-#     We must rewrite underscore-prefixed IDs back to the colon form so
-#     that authorization checks (which key on "note:") always fire.
-#     """
-#     if document_id.startswith('note_'):
-#         document_id = 'note:' + document_id[5:]
-#     return document_id
-#
-#
-# @sio.on('ydoc:document:join')
-# async def ydoc_document_join(sid, data):
-#     """Handle user joining a document"""
-#     user = SESSION_POOL.get(sid)
-#     if not user:
-#         return
-#
-#     try:
-#         document_id = normalize_document_id(data['document_id'])
-#
-#         if document_id.startswith('note:'):
-#             note_id = document_id.split(':')[1]
-#             note = await Notes.get_note_by_id(note_id)
-#             if not note:
-#                 log.error(f'Note {note_id} not found')
-#                 return
-#
-#             if (
-#                 user.get('role') != 'admin'
-#                 and user.get('id') != note.user_id
-#                 and not await AccessGrants.has_access(
-#                     user_id=user.get('id'),
-#                     resource_type='note',
-#                     resource_id=note.id,
-#                     permission='read',
-#                 )
-#             ):
-#                 log.error(f'User {user.get("id")} does not have access to note {note_id}')
-#                 return
-#
-#         user_id = data.get('user_id', sid)
-#         user_name = data.get('user_name', 'Anonymous')
-#         user_color = data.get('user_color', '#000000')
-#
-#         log.info(f'User {user_id} joining document {document_id}')
-#         await YDOC_MANAGER.add_user(document_id=document_id, user_id=sid)
-#
-#         # Join Socket.IO room
-#         await sio.enter_room(sid, f'doc_{document_id}')
-#
-#         active_session_ids = get_session_ids_from_room(f'doc_{document_id}')
-#
-#         # Get the Yjs document state
-#         ydoc = Y.Doc()
-#         updates = await YDOC_MANAGER.get_updates(document_id)
-#         for update in updates:
-#             ydoc.apply_update(bytes(update))
-#
-#         # Encode the entire document state as an update
-#         state_update = ydoc.get_update()
-#         await sio.emit(
-#             'ydoc:document:state',
-#             {
-#                 'document_id': document_id,
-#                 'state': list(state_update),  # Convert bytes to list for JSON
-#                 'sessions': active_session_ids,
-#             },
-#             room=sid,
-#         )
-#
-#         # Notify other users about the new user
-#         await sio.emit(
-#             'ydoc:user:joined',
-#             {
-#                 'document_id': document_id,
-#                 'user_id': user_id,
-#                 'user_name': user_name,
-#                 'user_color': user_color,
-#             },
-#             room=f'doc_{document_id}',
-#             skip_sid=sid,
-#         )
-#
-#         log.info(f'User {user_id} successfully joined document {document_id}')
-#
-#     except Exception as e:
-#         log.error(f'Error in yjs_document_join: {e}')
-#         await sio.emit('error', {'message': 'Failed to join document'}, room=sid)
-#
-#
-# async def document_save_handler(document_id, data, user):
-#     document_id = normalize_document_id(document_id)
-#
-#     if document_id.startswith('note:'):
-#         note_id = document_id.split(':')[1]
-#         note = await Notes.get_note_by_id(note_id)
-#         if not note:
-#             log.error(f'Note {note_id} not found')
-#             return
-#
-#         if (
-#             user.get('role') != 'admin'
-#             and user.get('id') != note.user_id
-#             and not await AccessGrants.has_access(
-#                 user_id=user.get('id'),
-#                 resource_type='note',
-#                 resource_id=note.id,
-#                 permission='write',
-#             )
-#         ):
-#             log.error(f'User {user.get("id")} does not have write access to note {note_id}')
-#             return
-#
-#         await Notes.update_note_by_id(note_id, NoteUpdateForm(data=data))
-#
-#
-# @sio.on('ydoc:document:state')
-# async def yjs_document_state(sid, data):
-#     """Send the current state of the Yjs document to the user"""
-#     try:
-#         document_id = data['document_id']
-#
-#         document_id = normalize_document_id(document_id)
-#         room = f'doc_{document_id}'
-#
-#         active_session_ids = get_session_ids_from_room(room)
-#
-#         if sid not in active_session_ids:
-#             log.warning(f'Session {sid} not in room {room}. Cannot send state.')
-#             return
-#
-#         if not await YDOC_MANAGER.document_exists(document_id):
-#             log.warning(f'Document {document_id} not found')
-#             return
-#
-#         # Get the Yjs document state
-#         ydoc = Y.Doc()
-#         updates = await YDOC_MANAGER.get_updates(document_id)
-#         for update in updates:
-#             ydoc.apply_update(bytes(update))
-#
-#         # Encode the entire document state as an update
-#         state_update = ydoc.get_update()
-#
-#         await sio.emit(
-#             'ydoc:document:state',
-#             {
-#                 'document_id': document_id,
-#                 'state': list(state_update),  # Convert bytes to list for JSON
-#                 'sessions': active_session_ids,
-#             },
-#             room=sid,
-#         )
-#     except Exception as e:
-#         log.error(f'Error in yjs_document_state: {e}')
-#
-#
-# @sio.on('ydoc:document:update')
-# async def yjs_document_update(sid, data):
-#     """Handle Yjs document updates"""
-#     try:
-#         document_id = data['document_id']
-#
-#         document_id = normalize_document_id(document_id)
-#
-#         # Verify the sender actually joined this document room
-#         room = f'doc_{document_id}'
-#         active_session_ids = get_session_ids_from_room(room)
-#         if sid not in active_session_ids:
-#             log.warning(f'Session {sid} not in room {room}. Rejecting update.')
-#             return
-#
-#         # Verify write permission — room membership only proves read access
-#         user = SESSION_POOL.get(sid)
-#         if not user:
-#             return
-#
-#         if document_id.startswith('note:'):
-#             note_id = document_id.split(':')[1]
-#             note = await Notes.get_note_by_id(note_id)
-#             if not note:
-#                 log.error(f'Note {note_id} not found')
-#                 return
-#
-#             if (
-#                 user.get('role') != 'admin'
-#                 and user.get('id') != note.user_id
-#                 and not await AccessGrants.has_access(
-#                     user_id=user.get('id'),
-#                     resource_type='note',
-#                     resource_id=note.id,
-#                     permission='write',
-#                 )
-#             ):
-#                 log.warning(f'User {user.get("id")} does not have write access to note {note_id}. Rejecting update.')
-#                 return
-#
-#         try:
-#             await stop_item_tasks(REDIS, document_id)
-#         except Exception:
-#             pass
-#
-#         user_id = data.get('user_id', sid)
-#
-#         update = data['update']  # List of bytes from frontend
-#
-#         await YDOC_MANAGER.append_to_updates(
-#             document_id=document_id,
-#             update=update,  # Convert list of bytes to bytes
-#         )
-#
-#         # Broadcast update to all other users in the document
-#         await sio.emit(
-#             'ydoc:document:update',
-#             {
-#                 'document_id': document_id,
-#                 'user_id': user_id,
-#                 'update': update,
-#                 'socket_id': sid,  # Add socket_id to match frontend filtering
-#             },
-#             room=f'doc_{document_id}',
-#             skip_sid=sid,
-#         )
-#
-#         async def debounced_save():
-#             await asyncio.sleep(0.5)
-#             await document_save_handler(document_id, data.get('data', {}), user)
-#
-#         if data.get('data'):
-#             await create_task(REDIS, debounced_save(), document_id)
-#
-#     except Exception as e:
-#         log.error(f'Error in yjs_document_update: {e}')
-#
-#
-# @sio.on('ydoc:document:leave')
-# async def yjs_document_leave(sid, data):
-#     """Handle user leaving a document"""
-#     user = SESSION_POOL.get(sid)
-#     if not user:  # authenticated session required (parity with sibling handlers)
-#         return
-#     try:
-#         document_id = normalize_document_id(data['document_id'])
-#
-#         log.info(f'User {user["id"]} leaving document {document_id}')
-#
-#         # Remove user from the document
-#         await YDOC_MANAGER.remove_user(document_id=document_id, user_id=sid)
-#
-#         # Leave Socket.IO room
-#         await sio.leave_room(sid, f'doc_{document_id}')
-#
-#         # Notify other users; user_id is the authenticated identity, not client-supplied
-#         await sio.emit(
-#             'ydoc:user:left',
-#             {'document_id': document_id, 'user_id': user['id']},
-#             room=f'doc_{document_id}',
-#         )
-#
-#         if await YDOC_MANAGER.document_exists(document_id) and len(await YDOC_MANAGER.get_users(document_id)) == 0:
-#             log.info(f'Cleaning up document {document_id} as no users are left')
-#             await YDOC_MANAGER.clear_document(document_id)
-#
-#     except Exception as e:
-#         log.error(f'Error in yjs_document_leave: {e}')
-#
-#
-# @sio.on('ydoc:awareness:update')
-# async def yjs_awareness_update(sid, data):
-#     """Handle awareness updates (cursors, selections, etc.)"""
-#     user = SESSION_POOL.get(sid)
-#     if not user:  # authenticated session required (parity with sibling handlers)
-#         return
-#     try:
-#         document_id = normalize_document_id(data['document_id'])
-#         room = f'doc_{document_id}'
-#         if room not in sio.rooms(sid):  # must have joined the document first
-#             return
-#         update = data['update']
-#
-#         # Broadcast to the room; user_id is the authenticated identity, not client-supplied
-#         await sio.emit(
-#             'ydoc:awareness:update',
-#             {'document_id': document_id, 'user_id': user['id'], 'update': update},
-#             room=room,
-#             skip_sid=sid,
-#         )
-#
-#     except Exception as e:
-#         log.error(f'Error in yjs_awareness_update: {e}')
-
-
 @sio.event
 async def disconnect(sid, reason=None):
     if sid in SESSION_POOL:
         user = SESSION_POOL[sid]
         del SESSION_POOL[sid]
 
-        # Clean up USAGE_POOL entries for this session
-        for model_id in list(USAGE_POOL.keys()):
-            connections = USAGE_POOL.get(model_id)
-            if connections and sid in connections:
-                del connections[sid]
-                if not connections:
-                    del USAGE_POOL[model_id]
-                else:
-                    USAGE_POOL[model_id] = connections
-
-        await YDOC_MANAGER.remove_user_from_all_documents(sid)
+        # # Clean up USAGE_POOL entries for this session
+        # for model_id in list(USAGE_POOL.keys()):
+        #     connections = USAGE_POOL.get(model_id)
+        #     if connections and sid in connections:
+        #         del connections[sid]
+        #         if not connections:
+        #             del USAGE_POOL[model_id]
+        #         else:
+        #             USAGE_POOL[model_id] = connections
+        #
+        # await YDOC_MANAGER.remove_user_from_all_documents(sid)
     else:
         pass
         # print(f"Unknown session ID {sid} disconnected")
@@ -918,126 +472,6 @@ async def _make_channel_emitter(request_info):
     return __channel_emitter__
 
 
-# async def get_event_emitter(request_info, update_db=True):
-#     # Channel mode: route pipeline output to channel message updates
-#     if (request_info.get('chat_id') or '').startswith('channel:'):
-#         return await _make_channel_emitter(request_info)
-# 
-#     async def __event_emitter__(event_data):
-#         user_id = request_info['user_id']
-#         chat_id = request_info['chat_id']
-#         message_id = request_info['message_id']
-# 
-#         await sio.emit(
-#             'events',
-#             {
-#                 'chat_id': chat_id,
-#                 'message_id': message_id,
-#                 'data': event_data,
-#             },
-#             room=f'user:{user_id}',
-#         )
-# 
-#         if update_db and message_id and not (request_info.get('chat_id') or '').startswith('local:'):
-#             event_type = event_data.get('type')
-# 
-#             if event_type == 'status':
-#                 await Chats.add_message_status_to_chat_by_id_and_message_id(
-#                     request_info['chat_id'],
-#                     request_info['message_id'],
-#                     event_data.get('data', {}),
-#                 )
-# 
-#             elif event_type == 'message':
-#                 message = await Chats.get_message_by_id_and_message_id(
-#                     request_info['chat_id'],
-#                     request_info['message_id'],
-#                 )
-# 
-#                 if message:
-#                     content = message.get('content', '')
-#                     content += event_data.get('data', {}).get('content', '')
-# 
-#                     await Chats.upsert_message_to_chat_by_id_and_message_id(
-#                         request_info['chat_id'],
-#                         request_info['message_id'],
-#                         {
-#                             'content': content,
-#                         },
-#                     )
-# 
-#             elif event_type == 'replace':
-#                 content = event_data.get('data', {}).get('content', '')
-# 
-#                 await Chats.upsert_message_to_chat_by_id_and_message_id(
-#                     request_info['chat_id'],
-#                     request_info['message_id'],
-#                     {
-#                         'content': content,
-#                     },
-#                 )
-# 
-#             elif event_type == 'embeds':
-#                 event_payload = event_data.get('data', {})
-#                 embeds = event_payload.get('embeds', [])
-# 
-#                 if not event_payload.get('replace', False):
-#                     message = await Chats.get_message_by_id_and_message_id(
-#                         request_info['chat_id'],
-#                         request_info['message_id'],
-#                     )
-#                     embeds.extend(message.get('embeds', []))
-# 
-#                 await Chats.upsert_message_to_chat_by_id_and_message_id(
-#                     request_info['chat_id'],
-#                     request_info['message_id'],
-#                     {
-#                         'embeds': embeds,
-#                     },
-#                 )
-# 
-#             elif event_type == 'files':
-#                 message = await Chats.get_message_by_id_and_message_id(
-#                     request_info['chat_id'],
-#                     request_info['message_id'],
-#                 )
-# 
-#                 files = event_data.get('data', {}).get('files', [])
-#                 files.extend(message.get('files', []))
-# 
-#                 await Chats.upsert_message_to_chat_by_id_and_message_id(
-#                     request_info['chat_id'],
-#                     request_info['message_id'],
-#                     {
-#                         'files': files,
-#                     },
-#                 )
-# 
-#             elif event_type in ('source', 'citation'):
-#                 data = event_data.get('data', {})
-#                 if data.get('type') is None:
-#                     message = await Chats.get_message_by_id_and_message_id(
-#                         request_info['chat_id'],
-#                         request_info['message_id'],
-#                     )
-# 
-#                     sources = message.get('sources', [])
-#                     sources.append(data)
-# 
-#                     await Chats.upsert_message_to_chat_by_id_and_message_id(
-#                         request_info['chat_id'],
-#                         request_info['message_id'],
-#                         {
-#                             'sources': sources,
-#                         },
-#                     )
-# 
-#     if 'user_id' in request_info and 'chat_id' in request_info and 'message_id' in request_info:
-#         return __event_emitter__
-#     else:
-#         return None
-
-
 async def get_event_call(request_info):
     async def __event_caller__(event_data):
         session_id = request_info['session_id']
@@ -1057,7 +491,7 @@ async def get_event_call(request_info):
                     'data': event_data,
                 },
                 to=session_id,
-                timeout=settings.WEBSOCKET.EVENT_CALLER_TIMEOUT,
+                timeout=settings.SYSTEM.WEBSOCKET.EVENT_CALLER_TIMEOUT,
             )
         except TimeoutError:
             log.warning(f'Event caller timed out for session {session_id}')

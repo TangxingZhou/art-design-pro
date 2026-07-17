@@ -41,3 +41,14 @@ async def RequestValidationHandle(_: Request, exc: RequestValidationError) -> JS
 async def ResponseValidationHandle(_: Request, exc: ResponseValidationError) -> JSONResponse:
     content = dict(code=500, msg=f"ResponseValidationError, {exc}")
     return JSONResponse(content=content, status_code=500)
+
+
+class UnicornException(Exception):
+    def __init__(self, name: str):
+        self.name = name
+
+async def unicorn_exception_handler(request: Request, exc: UnicornException):
+    return JSONResponse(
+        status_code=418,
+        content={"message": f"Oops! {exc.name} did something. There goes a rainbow..."},
+    )

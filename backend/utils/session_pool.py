@@ -39,19 +39,19 @@ async def get_session() -> aiohttp.ClientSession:
     global _session
     if _session is None or _session.closed:
         connector_kwargs = {
-            'ttl_dns_cache': settings.AIOHTTP.POOL_DNS_TTL,
+            'ttl_dns_cache': settings.SYSTEM.AIOHTTP.POOL_DNS_TTL,
             'enable_cleanup_closed': True,
         }
-        if settings.AIOHTTP.POOL_CONNECTIONS is not None:
-            connector_kwargs['limit'] = settings.AIOHTTP.POOL_CONNECTIONS
+        if settings.SYSTEM.AIOHTTP.POOL_CONNECTIONS is not None:
+            connector_kwargs['limit'] = settings.SYSTEM.AIOHTTP.POOL_CONNECTIONS
         else:
             connector_kwargs['limit'] = 0  # aiohttp: 0 = unlimited
-        if settings.AIOHTTP.POOL_CONNECTIONS_PER_HOST is not None:
-            connector_kwargs['limit_per_host'] = settings.AIOHTTP.POOL_CONNECTIONS_PER_HOST
+        if settings.SYSTEM.AIOHTTP.POOL_CONNECTIONS_PER_HOST is not None:
+            connector_kwargs['limit_per_host'] = settings.SYSTEM.AIOHTTP.POOL_CONNECTIONS_PER_HOST
         else:
             connector_kwargs['limit_per_host'] = 0  # aiohttp: 0 = unlimited
         connector = aiohttp.TCPConnector(**connector_kwargs)
-        timeout = aiohttp.ClientTimeout(total=settings.AIOHTTP.CLIENT_TIMEOUT)
+        timeout = aiohttp.ClientTimeout(total=settings.SYSTEM.AIOHTTP.CLIENT_TIMEOUT)
         _session = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
@@ -59,9 +59,9 @@ async def get_session() -> aiohttp.ClientSession:
         )
         log.info(
             'Created shared aiohttp session pool (limit=%s, per_host=%s, dns_ttl=%d)',
-            settings.AIOHTTP.POOL_CONNECTIONS or 'unlimited',
-            settings.AIOHTTP.POOL_CONNECTIONS_PER_HOST or 'unlimited',
-            settings.AIOHTTP.POOL_DNS_TTL,
+            settings.SYSTEM.AIOHTTP.POOL_CONNECTIONS or 'unlimited',
+            settings.SYSTEM.AIOHTTP.POOL_CONNECTIONS_PER_HOST or 'unlimited',
+            settings.SYSTEM.AIOHTTP.POOL_DNS_TTL,
         )
     return _session
 

@@ -78,8 +78,8 @@ async def post_webhook(name: str, url: str, message: str, event_data: dict, desc
             async with session.post(
                 url,
                 json=payload,
-                ssl=settings.AIOHTTP.CLIENT_SESSION_SSL,
-                allow_redirects=settings.AIOHTTP.CLIENT_ALLOW_REDIRECTS,
+                ssl=settings.SYSTEM.AIOHTTP.CLIENT_SESSION_SSL,
+                allow_redirects=settings.SYSTEM.AIOHTTP.CLIENT_ALLOW_REDIRECTS,
             ) as r:
                 r_text = await r.text()
                 r.raise_for_status()

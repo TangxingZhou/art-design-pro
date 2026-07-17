@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import errno
 import hashlib
@@ -25,7 +27,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from config import settings
 from constants import ERROR_MESSAGES, UPLOAD_DIR
 from utils.events import EVENTS, publish_event
-from utils.db import get_async_db_context, get_async_session
+from utils.db import get_async_session
 from models.config import Config
 from models.files import (
     FileForm,
@@ -35,10 +37,8 @@ from models.files import (
     Files,
 )
 from models.users import Users
-from routers.retrieval import ProcessFileForm, process_file
 from utils.storage import Storage
 from utils.auth import get_admin_user, get_verified_user
-from utils.misc import strict_match_mime_type
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,7 +89,7 @@ def _is_text_file(file_path: str, chunk_size: int = 8192) -> bool:
 
 def _cleanup_local_cache(file_path: str) -> None:
     """Remove the local cached copy of a cloud-stored file after processing."""
-    if settings.STORAGE_PROVIDER == 'local':
+    if settings.SYSTEM.STORAGE_PROVIDER == 'local':
         return
     try:
         local_filename = os.path.basename(file_path)
@@ -99,136 +99,6 @@ def _cleanup_local_cache(file_path: str) -> None:
             log.debug(f'Cleaned up local cache: {local_path}')
     except OSError as e:
         log.warning(f'Failed to clean up local cache for {file_path}: {e}')
-
-
-async def process_uploaded_file(
-    request,
-    file,
-    file_path,
-    file_item,
-    file_metadata,
-    user,
-    db: Optional[AsyncSession] = None,
-):
-    async def _process_handler(db_session):
-        try:
-            content_type = file.content_type
-
-            # Detect mis-labeled text files (e.g. .ts → video/mp2t)
-            if content_type and content_type.startswith(('image/', 'video/')):
-                if _is_text_file(file_path):
-                    content_type = 'text/plain'
-
-            # stt_supported = await Config.get('audio.stt.supported_content_types', [])
-
-            if content_type and strict_match_mime_type(stt_supported, content_type):
-                # Audio / STT-supported files → transcribe then index
-                file_path_processed = await asyncio.to_thread(Storage.get_file, file_path)
-                result = await transcribe(
-                    request,
-                    file_path_processed,
-                    file_metadata,
-                    user,
-                )
-                await process_file(
-                    request,
-                    ProcessFileForm(file_id=file_item.id, content=result.get('text', '')),
-                    user=user,
-                    db=db_session,
-                )
-
-            elif (
-                content_type
-                and content_type.startswith(('image/', 'video/'))
-                and await Config.get('rag.content_extraction_engine') != 'external'
-            ):
-                # Media files without an external extraction engine
-                if content_type.startswith('video/'):
-                    # Videos are stored as-is for downstream multimodal
-                    # processing (Tools, vision models). Attempting text
-                    # extraction causes "Timeout reached while detecting
-                    # encoding" errors.
-                    log.info(f'Video file detected ({content_type}), skipping text extraction')
-                    await Files.update_file_data_by_id(
-                        file_item.id,
-                        {'status': 'completed'},
-                        db=db_session,
-                    )
-                else:
-                    raise Exception(f'File type {content_type} is not supported for processing')
-
-            else:
-                # Documents, or any file when an external engine is configured
-                if not content_type:
-                    log.info(f'File type {file.content_type} is not provided, but trying to process anyway')
-                await process_file(
-                    request,
-                    ProcessFileForm(file_id=file_item.id),
-                    user=user,
-                    db=db_session,
-                )
-
-            # # Auto-link to Knowledge Collection when uploaded from one (#24807).
-            # # Mirrors POST /knowledge/{id}/file/add so linking doesn't depend
-            # # on the frontend staying connected after upload.
-            # knowledge_id = file_metadata.get('knowledge_id')
-            # if knowledge_id:
-            #     try:
-            #         # Gate like POST /knowledge/{id}/file/add: a client-supplied
-            #         # metadata.knowledge_id must not let a non-writer attach files (CWE-862/863).
-            #         knowledge = await Knowledges.get_knowledge_by_id(id=knowledge_id, db=db_session)
-            #         can_write = bool(knowledge) and (
-            #             knowledge.user_id == user.id
-            #             or user.role == 'admin'
-            #             or await AccessGrants.has_access(
-            #                 user_id=user.id,
-            #                 resource_type='knowledge',
-            #                 resource_id=knowledge.id,
-            #                 permission='write',
-            #                 db=db_session,
-            #             )
-            #         )
-            #         if not can_write:
-            #             log.warning(
-            #                 f'Refusing to auto-link file {file_item.id} to knowledge '
-            #                 f'{knowledge_id}: user {user.id} lacks write access'
-            #             )
-            #         else:
-            #             await Knowledges.add_file_to_knowledge_by_id(
-            #                 knowledge_id=knowledge_id,
-            #                 file_id=file_item.id,
-            #                 user_id=user.id,
-            #                 directory_id=file_metadata.get('directory_id'),
-            #             )
-            #             await process_file(
-            #                 request,
-            #                 ProcessFileForm(file_id=file_item.id, collection_name=knowledge_id),
-            #                 user=user,
-            #                 db=db_session,
-            #             )
-            #             log.info(f'Linked file {file_item.id} to knowledge {knowledge_id}')
-            #     except Exception as e:
-            #         log.warning(f'Failed to link file {file_item.id} to knowledge {knowledge_id}: {e}')
-
-        except Exception as e:
-            log.error(f'Error processing file: {file_item.id}')
-            await Files.update_file_data_by_id(
-                file_item.id,
-                {
-                    'status': 'failed',
-                    'error': str(e.detail) if hasattr(e, 'detail') else str(e),
-                },
-                db=db_session,
-            )
-
-    try:
-        if db:
-            await _process_handler(db)
-        else:
-            async with get_async_db_context() as db_session:
-                await _process_handler(db_session)
-    finally:
-        _cleanup_local_cache(file_path)
 
 
 @router.post('/', response_model=FileModelResponse)
@@ -320,10 +190,10 @@ async def upload_file_handler(
         name = filename
         filename = f'{id}_{filename}'
         tags = {
-            'OpenWebUI-User-Email': user.email,
-            'OpenWebUI-User-Id': user.id,
-            'OpenWebUI-User-Name': user.name,
-            'OpenWebUI-File-Id': id,
+            'X-User-Email': user.email,
+            'X-User-Id': user.id,
+            'X-User-Name': user.name,
+            'X-File-Id': id,
         }
         try:
             contents, file_path = await asyncio.to_thread(Storage.upload_file, file.file, filename, tags)
@@ -367,7 +237,7 @@ async def upload_file_handler(
                     'filename': name,
                     'path': file_path,
                     'data': {
-                        **({'status': 'pending'} if process else {}),
+                        **({'status': 'pending'} if process else {'status': 'completed'}),
                     },
                     'meta': {
                         'name': name,
@@ -381,42 +251,14 @@ async def upload_file_handler(
             db=db,
         )
 
-        # if 'channel_id' in file_metadata:
-        #     channel = await Channels.get_channel_by_id_and_user_id(file_metadata['channel_id'], user.id, db=db)
-        #     if channel:
-        #         await Channels.add_file_to_channel_by_id(channel.id, file_item.id, user.id, db=db)
-
-        if process:
-            if background_tasks and process_in_background:
-                background_tasks.add_task(
-                    process_uploaded_file,
-                    request,
-                    file,
-                    file_path,
-                    file_item,
-                    file_metadata,
-                    user,
-                )
-                return {'status': True, **file_item.model_dump()}
-            else:
-                await process_uploaded_file(
-                    request,
-                    file,
-                    file_path,
-                    file_item,
-                    file_metadata,
-                    user,
-                    db=db,
-                )
-                return {'status': True, **file_item.model_dump()}
+        if file_item:
+            _cleanup_local_cache(file_path)
+            return file_item
         else:
-            if file_item:
-                return file_item
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ERROR_MESSAGES.DEFAULT('Error uploading file'),
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ERROR_MESSAGES.DEFAULT('Error uploading file'),
+            )
 
     except HTTPException as e:
         raise e
@@ -444,7 +286,7 @@ async def list_files(
     db: AsyncSession = Depends(get_async_session),
 ):
     skip = (page - 1) * PAGE_SIZE
-    user_id = None if (user.role == 'admin' and settings.BYPASS_ADMIN_ACCESS_CONTROL) else user.id
+    user_id = None if (user.role == 'admin' and settings.SYSTEM.BYPASS_ADMIN_ACCESS_CONTROL) else user.id
 
     result = await Files.get_file_list(user_id=user_id, skip=skip, limit=PAGE_SIZE, db=db)
 
@@ -478,7 +320,7 @@ async def search_files(
     Uses SQL-based filtering with pagination for better performance.
     """
     # Determine user_id: null for admin with bypass (search all), user.id otherwise
-    user_id = None if (user.role == 'admin' and settings.BYPASS_ADMIN_ACCESS_CONTROL) else user.id
+    user_id = None if (user.role == 'admin' and settings.SYSTEM.BYPASS_ADMIN_ACCESS_CONTROL) else user.id
 
     # Use optimized database query with pagination
     files = await Files.search_files(
@@ -513,7 +355,7 @@ async def count_files(
     user=Depends(get_verified_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    user_id = None if (user.role == 'admin' and settings.BYPASS_ADMIN_ACCESS_CONTROL) else user.id
+    user_id = None if (user.role == 'admin' and settings.SYSTEM.BYPASS_ADMIN_ACCESS_CONTROL) else user.id
     return await Files.count_files_by_user_id(user_id=user_id, db=db)
 
 
@@ -564,65 +406,6 @@ async def get_file_by_id(id: str, user=Depends(get_verified_user), db: AsyncSess
 
     if file.user_id == user.id or user.role == 'admin' or await has_access_to_file(id, 'read', user, db=db):
         return file
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=ERROR_MESSAGES.NOT_FOUND,
-        )
-
-
-@router.get('/{id}/process/status')
-async def get_file_process_status(
-    id: str,
-    stream: bool = Query(False),
-    user=Depends(get_verified_user),
-    db: AsyncSession = Depends(get_async_session),
-):
-    file = await Files.get_file_by_id(id, db=db)
-
-    if not file:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=ERROR_MESSAGES.NOT_FOUND,
-        )
-
-    if file.user_id == user.id or user.role == 'admin' or await has_access_to_file(id, 'read', user, db=db):
-        if stream:
-            MAX_FILE_PROCESSING_DURATION = 3600 * 2
-
-            async def event_stream(file_id):
-                # NOTE: We intentionally do NOT capture the request's db session here.
-                # Each poll creates its own short-lived session to avoid holding a
-                # connection for hours. A WebSocket push would be more efficient.
-                for _ in range(MAX_FILE_PROCESSING_DURATION):
-                    file_item = await Files.get_file_by_id(file_id)  # Creates own session
-                    if file_item:
-                        data = file_item.model_dump().get('data', {})
-                        status = data.get('status')
-
-                        if status:
-                            event = {'status': status}
-                            if status == 'failed':
-                                event['error'] = data.get('error')
-
-                            yield f'data: {json.dumps(event)}\n\n'
-                            if status in ('completed', 'failed'):
-                                break
-                        else:
-                            # Legacy
-                            break
-                    else:
-                        yield f'data: {json.dumps({"status": "not_found"})}\n\n'
-                        break
-
-                    await asyncio.sleep(1)
-
-            return StreamingResponse(
-                event_stream(file.id),
-                media_type='text/event-stream',
-            )
-        else:
-            return {'status': file.data.get('status', 'pending')}
     else:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -688,17 +471,17 @@ async def update_file_data_content_by_id(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=ERROR_MESSAGES.FILE_TOO_LARGE(size=f'{max_size} MB'),
             )
-        try:
-            await process_file(
-                request,
-                ProcessFileForm(file_id=id, content=form_data.content),
-                user=user,
-                db=db,
-            )
-            file = await Files.get_file_by_id(id=id, db=db)
-        except Exception as e:
-            log.exception(e)
-            log.error(f'Error processing file: {file.id}')
+        # try:
+        #     await process_file(
+        #         request,
+        #         ProcessFileForm(file_id=id, content=form_data.content),
+        #         user=user,
+        #         db=db,
+        #     )
+        #     file = await Files.get_file_by_id(id=id, db=db)
+        # except Exception as e:
+        #     log.exception(e)
+        #     log.error(f'Error processing file: {file.id}')
 
         # # Propagate content change to all knowledge collections referencing
         # # this file.  Without this the old embeddings remain in the knowledge

@@ -8,6 +8,11 @@ from pythonjsonlogger.json import JsonFormatter
 from jinja2 import Environment, FileSystemLoader
 
 
+class AuditFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.__dict__.get('auditable', False)
+
+
 class CustomJsonFormatter(JsonFormatter):
 
     def process_log_record(self, log_data):
@@ -22,6 +27,15 @@ class CustomJsonFormatter(JsonFormatter):
         super().add_fields(log_data, record, message_dict)
         # log_data["datetime"] = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S.%f")
         log_data['ts'] = record.created
+        if os.getenv('ENABLE_OTEL', 'false').lower() == 'true':
+            from opentelemetry import trace
+
+            extras = {}
+            context = trace.get_current_span().get_span_context()
+            if context.is_valid:
+                extras['trace_id'] = trace.format_trace_id(context.trace_id)
+                extras['span_id'] = trace.format_span_id(context.span_id)
+            log_data.update(extras)
 
 
 def get_logger(name=None) -> logging.Logger:

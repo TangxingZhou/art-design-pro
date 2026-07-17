@@ -22,16 +22,16 @@ log = logging.getLogger(__name__)
 
 API_CONFIG_KEYS = ('openai.api_configs', 'ollama.api_configs')
 DICT_CONFIG_KEY_ALIASES = {
-    'openai.api_configs': ('OPENAI_API_CONFIGS',),
-    'ollama.api_configs': ('OLLAMA_API_CONFIGS',),
-    'rag.mineru_params': ('MINERU_PARAMS',),
-    'rag.docling_params': ('DOCLING_PARAMS',),
-    'web.search.linkup_search_params': ('LINKUP_SEARCH_PARAMS',),
-    'image_generation.automatic1111.api_params': ('AUTOMATIC1111_PARAMS',),
-    'image_generation.openai.params': ('IMAGES_OPENAI_API_PARAMS',),
-    'audio.tts.openai.params': ('AUDIO_TTS_OPENAI_PARAMS',),
-    'models.default_metadata': ('DEFAULT_MODEL_METADATA',),
-    'models.default_params': ('DEFAULT_MODEL_PARAMS',),
+    # 'openai.api_configs': ('OPENAI_API_CONFIGS',),
+    # 'ollama.api_configs': ('OLLAMA_API_CONFIGS',),
+    # 'rag.mineru_params': ('MINERU_PARAMS',),
+    # 'rag.docling_params': ('DOCLING_PARAMS',),
+    # 'web.search.linkup_search_params': ('LINKUP_SEARCH_PARAMS',),
+    # 'image_generation.automatic1111.api_params': ('AUTOMATIC1111_PARAMS',),
+    # 'image_generation.openai.params': ('IMAGES_OPENAI_API_PARAMS',),
+    # 'audio.tts.openai.params': ('AUDIO_TTS_OPENAI_PARAMS',),
+    # 'models.default_metadata': ('DEFAULT_MODEL_METADATA',),
+    # 'models.default_params': ('DEFAULT_MODEL_PARAMS',),
     'user.permissions': ('USER_PERMISSIONS',),
 }
 DICT_CONFIG_KEYS = tuple(DICT_CONFIG_KEY_ALIASES)
@@ -358,9 +358,3 @@ class Config(Base):
             if repaired_keys or orphan_keys:
                 await db.commit()
                 log.info('Repaired flattened dict config rows for %s', ', '.join(repaired_keys))
-
-
-async def seed_registered_defaults(defaults: dict):
-    await Config.rename_prefix('rag.web', 'web')
-    await Config.repair_flattened_dict_configs()
-    await Config.seed_defaults(defaults)

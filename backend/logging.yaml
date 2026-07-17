@@ -27,7 +27,7 @@ formatters:
     static_fields:
       app: {{ NAME | default('example') }}
       env: {{ ENV | default('dev') }}
-      account: {{ ACCOUNT | default('test') }}
+      # account: {{ ACCOUNT | default('test') }}
       # version: ext://
   jsonl:
     (): ext://log.CustomJsonFormatter
@@ -42,7 +42,7 @@ formatters:
     static_fields:
       app: {{ NAME | default('example') }}
       env: {{ ENV | default('dev') }}
-      account: {{ ACCOUNT | default('test') }}
+      # account: {{ ACCOUNT | default('test') }}
   uvicorn-access:
     (): ext://log.CustomJsonFormatter
     format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(client_addr)s %(request_line)s %(status_code)s'
@@ -56,7 +56,6 @@ formatters:
     static_fields:
       app: {{ NAME | default('example') }}
       env: {{ ENV | default('dev') }}
-      account: {{ ACCOUNT | default('test') }}
   gunicorn-access:
     (): ext://log.CustomJsonFormatter
     format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(h)s %(l)s %(u)s %(t)s %(r)s %(s)s %(b)s %(f)s %(a)s'
@@ -70,7 +69,6 @@ formatters:
     static_fields:
       app: {{ NAME | default('example') }}
       env: {{ ENV | default('dev') }}
-      account: {{ ACCOUNT | default('test') }}
 handlers:
   console:
     class: logging.StreamHandler
@@ -79,7 +77,7 @@ handlers:
     formatter: colored
   file:
     class: logging.handlers.RotatingFileHandler
-    filename: logs/{{ NAME | default('example') }}.{{ ENV | default('dev') }}.{{ ACCOUNT | default('test') }}.log
+    filename: logs/{{ NAME | default('example') }}.{{ ENV | default('dev') }}.log
     mode: a
     encoding: utf-8
     maxBytes: {{ 1024 * 1024 * 100 }}
@@ -88,7 +86,7 @@ handlers:
     formatter: basic
   jsonl:
     class: logging.handlers.TimedRotatingFileHandler
-    filename: logs/{{ NAME | default('example') }}.{{ ENV | default('dev') }}.{{ ACCOUNT | default('test') }}.jsonl
+    filename: logs/{{ NAME | default('example') }}.{{ ENV | default('dev') }}.jsonl
     when: midnight
     interval: 1
     backupCount: 7
@@ -213,4 +211,6 @@ loggers:
     handlers:
       - file
     filters: []
-filters: []
+filters:
+  audit:
+    "()": ext://log.AuditFilter

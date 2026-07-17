@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, Column, Index, String, Text, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-OAUTH_SESSION_TOKEN_ENCRYPTION_KEY = settings.OAUTH.SESSION_TOKEN_ENCRYPTION_KEY or settings.SECRET_KEY
+OAUTH_SESSION_TOKEN_ENCRYPTION_KEY = settings.SYSTEM.OAUTH.SESSION_TOKEN_ENCRYPTION_KEY or settings.SECRET_KEY
 
 log = logging.getLogger(__name__)
 

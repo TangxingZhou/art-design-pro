@@ -7,11 +7,10 @@ from config import parse_settings
 
 
 def main():
-    # os.environ.setdefault("ENV", "dev")
-    _settings = parse_settings()
+    parse_settings()
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         reload=True,
         workers=1,

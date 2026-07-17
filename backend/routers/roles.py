@@ -1,10 +1,6 @@
 import logging
-import os
-from pathlib import Path
 from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from constants import CACHE_DIR
 from constants import ERROR_MESSAGES
 from utils.events import EVENTS, publish_event
 from utils.db import get_async_session

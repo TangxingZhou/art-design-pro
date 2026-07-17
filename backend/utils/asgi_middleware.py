@@ -143,9 +143,9 @@ class AuthTokenMiddleware:
     header.
     """
 
-    def __init__(self, app: ASGIApp, *, fastapi_app) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
-        self._fastapi_app = fastapi_app
+        # self._fastapi_app = fastapi_app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope['type'] != 'http':
@@ -161,7 +161,7 @@ class AuthTokenMiddleware:
             if cookie_token:
                 token = HTTPAuthorizationCredentials(scheme='Bearer', credentials=cookie_token)
         if token is None:
-            api_key = request.headers.get(settings.CUSTOM_API_KEY_HEADER)
+            api_key = request.headers.get(settings.SYSTEM.AUTH.CUSTOM_API_KEY_HEADER)
             if api_key:
                 token = HTTPAuthorizationCredentials(scheme='Bearer', credentials=api_key)
 

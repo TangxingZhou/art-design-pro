@@ -1,151 +1,52 @@
-project_name: Backend Example
-account: test
-status: running
-run_module:
-#database:
-#  driver: sqlite
-#  host:
-#  port:
-#  username:
-#  password:
-#  database:
-first_superuser_password: test@123
-smtp:
-  tls: true
-  ssl: false
-  port: 587
-  host:
-  user:
-  password:
-  emails_from_email:
-  emails_from_name:
-  email_reset_token_expire_hours: 48
-  email_test_user: test@example.com
-zmq:
-  endpoint: tcp://127.0.0.1
-  port: 5555
-  topic:
-feishu:
-redis:
-platform: {}
-spec:
-  default_config:
-    direct.enable: ENABLE_DIRECT_CONNECTIONS,
-#    models.base_models_cache: ENABLE_BASE_MODELS_CACHE,
-#    tool_server.connections: TOOL_SERVER_CONNECTIONS,
-    oauth.client.timeout: OAUTH_CLIENT_TIMEOUT,
-    webui.url: WEBUI_URL,
-    ui.enable_signup: ENABLE_SIGNUP,
-    ui.enable_login_form: ENABLE_LOGIN_FORM,
-    ui.enable_password_change_form: ENABLE_PASSWORD_CHANGE_FORM,
-    ui.default_locale: DEFAULT_LOCALE,
-#    ui.default_models: DEFAULT_MODELS,
-#    'ui.default_pinned_models': DEFAULT_PINNED_MODELS,
-#    'ui.prompt_suggestions': DEFAULT_PROMPT_SUGGESTIONS,
-#    'ui.model_order_list': MODEL_ORDER_LIST,
-#    'models.default_metadata': DEFAULT_MODEL_METADATA,
-#    'models.default_params': DEFAULT_MODEL_PARAMS,
-    ui.default_user_role: DEFAULT_USER_ROLE,
-    ui.default_group_id: DEFAULT_GROUP_ID,
-#    ui.pending_user_overlay_title: PENDING_USER_OVERLAY_TITLE,
-#    ui.pending_user_overlay_content: PENDING_USER_OVERLAY_CONTENT,
-#    ui.watermark: RESPONSE_WATERMARK,
-    user.permissions: USER_PERMISSIONS,
-#    'folders.enable': ENABLE_FOLDERS,
-#    'folders.max_file_count': FOLDER_MAX_FILE_COUNT,
-#    'channels.enable': ENABLE_CHANNELS,
-#    'calendar.enable': ENABLE_CALENDAR,
-#    'automations.enable': ENABLE_AUTOMATIONS,
-#    'automations.max_count': AUTOMATION_MAX_COUNT,
-#    'automations.min_interval': AUTOMATION_MIN_INTERVAL,
-#    'automations.auth_token_expires_in': AUTOMATION_AUTH_TOKEN_EXPIRES_IN,
-#    'notes.enable': ENABLE_NOTES,
-    users.enable_status: ENABLE_USER_STATUS,
-#    'evaluation.arena.enable': ENABLE_EVALUATION_ARENA_MODELS,
-#    'evaluation.arena.models': EVALUATION_ARENA_MODELS,
-    webhook_url: WEBHOOK_URL,
-#    'ui.enable_community_sharing': ENABLE_COMMUNITY_SHARING,
-#    'ui.enable_message_rating': ENABLE_MESSAGE_RATING,
-    ui.enable_user_webhooks: ENABLE_USER_WEBHOOKS,
-#    'ui.banners': WEBUI_BANNERS,
-    auth.admin.show: SHOW_ADMIN_DETAILS,
-    auth.admin.email: ADMIN_EMAIL,
-#    task.model.default': TASK_MODEL,
-#    'task.model.external': TASK_MODEL_EXTERNAL,
-#    'chat.context_compaction.enable': ENABLE_CONTEXT_COMPACTION,
-#    'chat.context_compaction.token_threshold': CONTEXT_COMPACTION_TOKEN_THRESHOLD,
-#    'chat.context_compaction.prompt_template': CONTEXT_COMPACTION_PROMPT_TEMPLATE,
-#    'task.title.prompt_template': TITLE_GENERATION_PROMPT_TEMPLATE,
-#    'task.tags.prompt_template': TAGS_GENERATION_PROMPT_TEMPLATE,
-#    'task.image.prompt_template': IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE,
-#    'task.follow_up.prompt_template': FOLLOW_UP_GENERATION_PROMPT_TEMPLATE,
-#    'task.follow_up.enable': ENABLE_FOLLOW_UP_GENERATION,
-#    'task.tags.enable': ENABLE_TAGS_GENERATION,
-#    'task.title.enable': ENABLE_TITLE_GENERATION,
-#    'task.query.search.enable': ENABLE_SEARCH_QUERY_GENERATION,
-#    'task.query.retrieval.enable': ENABLE_RETRIEVAL_QUERY_GENERATION,
-#    'task.query.prompt_template': QUERY_GENERATION_PROMPT_TEMPLATE,
-#    'task.autocomplete.enable': ENABLE_AUTOCOMPLETE_GENERATION,
-#    'task.autocomplete.input_max_length': AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH,
-#    'task.autocomplete.prompt_template': AUTOCOMPLETE_GENERATION_PROMPT_TEMPLATE,
-#    'task.voice.prompt_template': VOICE_MODE_PROMPT_TEMPLATE,
-#    'task.voice.prompt.enable': ENABLE_VOICE_MODE_PROMPT,
-#    'task.tools.prompt_template': TOOLS_FUNCTION_CALLING_PROMPT_TEMPLATE,
-    auth.enable_api_keys: ENABLE_API_KEYS,
-    auth.api_key.endpoint_restrictions: ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS,
-    auth.api_key.allowed_endpoints: API_KEYS_ALLOWED_ENDPOINTS,
-    auth.jwt_expiry: JWT_EXPIRES_IN,
-    oauth.enable_signup: ENABLE_OAUTH_SIGNUP,
-    oauth.auto_redirect: OAUTH_AUTO_REDIRECT,
-    oauth.refresh_token.include_scope: OAUTH_REFRESH_TOKEN_INCLUDE_SCOPE,
-    oauth.merge_accounts_by_email: OAUTH_MERGE_ACCOUNTS_BY_EMAIL,
-    oauth.client_id: OAUTH_CLIENT_ID,
-    oauth.client_secret: OAUTH_CLIENT_SECRET,
-    oauth.provider_url: OPENID_PROVIDER_URL,
-    oauth.end_session_endpoint: OPENID_END_SESSION_ENDPOINT,
-    oauth.redirect_uri: OPENID_REDIRECT_URI,
-    oauth.scopes: OAUTH_SCOPES,
-    oauth.timeout: OAUTH_TIMEOUT,
-    oauth.token_endpoint_auth_method: OAUTH_TOKEN_ENDPOINT_AUTH_METHOD,
-    oauth.code_challenge_method: OAUTH_CODE_CHALLENGE_METHOD,
-    oauth.provider_name: OAUTH_PROVIDER_NAME,
-    oauth.sub_claim: OAUTH_SUB_CLAIM,
-    oauth.username_claim: OAUTH_USERNAME_CLAIM,
-    oauth.picture_claim: OAUTH_PICTURE_CLAIM,
-    oauth.email_claim: OAUTH_EMAIL_CLAIM,
-    oauth.group_claim: OAUTH_GROUPS_CLAIM,
-    oauth.feishu.client_id: FEISHU_CLIENT_ID,
-    oauth.feishu.client_secret: FEISHU_CLIENT_SECRET,
-    oauth.feishu.scope: FEISHU_OAUTH_SCOPE,
-    oauth.feishu.redirect_uri: FEISHU_REDIRECT_URI,
-    oauth.enable_role_mapping: ENABLE_OAUTH_ROLE_MANAGEMENT,
-    oauth.enable_group_mapping: ENABLE_OAUTH_GROUP_MANAGEMENT,
-    oauth.enable_group_creation': ENABLE_OAUTH_GROUP_CREATION,
-    oauth.group_default_share: OAUTH_GROUP_DEFAULT_SHARE,
-    oauth.blocked_groups: OAUTH_BLOCKED_GROUPS,
-    oauth.roles_claim: OAUTH_ROLES_CLAIM,
-    oauth.allowed_roles: OAUTH_ALLOWED_ROLES,
-    oauth.admin_roles: OAUTH_ADMIN_ROLES,
-    oauth.allowed_domains: OAUTH_ALLOWED_DOMAINS,
-    oauth.update_picture_on_login: OAUTH_UPDATE_PICTURE_ON_LOGIN,
-    oauth.update_name_on_login: OAUTH_UPDATE_NAME_ON_LOGIN,
-    oauth.update_email_on_login: OAUTH_UPDATE_EMAIL_ON_LOGIN,
-    oauth.audience: OAUTH_AUDIENCE,
-#    'ldap.enable': ENABLE_LDAP,
-#    'ldap.server.label': LDAP_SERVER_LABEL,
-#    'ldap.server.host': LDAP_SERVER_HOST,
-#    'ldap.server.port': LDAP_SERVER_PORT,
-#    'ldap.server.attribute_for_mail': LDAP_ATTRIBUTE_FOR_MAIL,
-#    'ldap.server.attribute_for_username': LDAP_ATTRIBUTE_FOR_USERNAME,
-#    'ldap.server.app_dn': LDAP_APP_DN,
-#    'ldap.server.app_password': LDAP_APP_PASSWORD,
-#    'ldap.server.users_dn': LDAP_SEARCH_BASE,
-#    'ldap.server.search_filter': LDAP_SEARCH_FILTERS,
-#    'ldap.server.use_tls': LDAP_USE_TLS,
-#    'ldap.server.ca_cert_file': LDAP_CA_CERT_FILE,
-#    'ldap.server.validate_cert': LDAP_VALIDATE_CERT,
-#    'ldap.server.ciphers': LDAP_CIPHERS,
-#    'ldap.group.enable_management': ENABLE_LDAP_GROUP_MANAGEMENT,
-#    'ldap.group.enable_creation': ENABLE_LDAP_GROUP_CREATION,
-#    'ldap.server.attribute_for_groups': LDAP_ATTRIBUTE_FOR_GROUPS,
-
+PROJECT_NAME: Backend Example
+APP_TITLE: Backend Example
+APP_DESCRIPTION: Example for backend
+DATABASE:
+  URL: sqlite:///example.db
+  SCHEMA:
+REDIS:
+  URL: ''
+  CLUSTER: false
+  KEY_PREFIX: example
+SYSTEM:
+  RESET_CONFIG_ON_START: false
+  WEBUI_URL: ''
+  WEBHOOK_URL: ''
+  DEFAULT_USER_PERMISSIONS:
+    access_grants:
+      allow_users: true
+    features:
+      api_keys: false
+      folders: true
+      webhooks: false
+    settings:
+      interface: true
+  FILE_MAX_COUNT:
+  FILE_MAX_SIZE:
+  ALLOWED_FILE_EXTENSIONS: []
+  ENABLE_FOLDERS: false
+  FOLDER_MAX_FILE_COUNT: ''
+  AUTH:
+    ENABLE: true
+    ADMIN_EMAIL: admin@example.com
+    ADMIN_PASSWORD: ''
+    ADMIN_NAME: Admin
+    JWT_EXPIRES_IN: 1w
+    COOKIE_NAME: example-session
+  OAUTH:
+    ENABLE_OAUTH_SIGNUP: false
+  UI:
+    ENABLE_SIGNUP: true
+    ENABLE_LOGIN_FORM: true
+    ENABLE_PASSWORD_CHANGE_FORM: true
+    DEFAULT_LOCALE: ''
+    DEFAULT_USER_ROLE: pending
+    DEFAULT_GROUP_ID: ''
+    ENABLE_USER_WEBHOOKS: false
+  AUDIT:
+    INCLUDED_PATHS: []
+    EXCLUDED_PATHS: []
+    LOG_LEVEL: NONE
+    ENABLE_GET_REQUESTS: false
+  STORAGE_PROVIDER: local
+SPEC: {}
