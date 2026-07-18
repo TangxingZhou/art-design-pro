@@ -13,30 +13,30 @@ export ENV="production"
 # `${VAR,,}` form stays safe under `set -u` everywhere else.
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-cd "$SCRIPT_DIR" || exit 1
+cd "$SCRIPT_DIR/.." || exit 1
 
 # ── Secret key setup ─────────────────────────────────────────────────────────
 
-KEY_FILE="${SECRET_KEY_FILE:-.secret_key}"
-SECRET_KEY_LENGTH="${SECRET_KEY_LENGTH:-24}"
-PORT="${PORT:-8000}"
-HOST="${HOST:-0.0.0.0}"
+#KEY_FILE="${SECRET_KEY_FILE:-.secret_key}"
+#SECRET_KEY_LENGTH="${SECRET_KEY_LENGTH:-24}"
+#PORT="${PORT:-8000}"
+#HOST="${HOST:-0.0.0.0}"
 
-if [[ -z "${SECRET_KEY:-}" ]]; then
-  echo "No SECRET_KEY environment variable set, loading from file."
-
-  if [[ ! -f "$KEY_FILE" ]]; then
-    echo "Generating new SECRET_KEY..."
-    if ! [[ "$SECRET_KEY_LENGTH" =~ ^[1-9][0-9]*$ ]]; then
-      echo "SECRET_KEY_LENGTH must be a positive integer." >&2
-      exit 1
-    fi
-    head -c "$SECRET_KEY_LENGTH" /dev/random | base64 > "$KEY_FILE"
-  fi
-
-  echo "Loading SECRET_KEY from ${KEY_FILE}"
-  SECRET_KEY=$(cat "$KEY_FILE")
-fi
+#if [[ -z "${SECRET_KEY:-}" ]]; then
+#  echo "No SECRET_KEY environment variable set, loading from file."
+#
+#  if [[ ! -f "$KEY_FILE" ]]; then
+#    echo "Generating new SECRET_KEY..."
+#    if ! [[ "$SECRET_KEY_LENGTH" =~ ^[1-9][0-9]*$ ]]; then
+#      echo "SECRET_KEY_LENGTH must be a positive integer." >&2
+#      exit 1
+#    fi
+#    head -c "$SECRET_KEY_LENGTH" /dev/random | base64 > "$KEY_FILE"
+#  fi
+#
+#  echo "Loading SECRET_KEY from ${KEY_FILE}"
+#  SECRET_KEY=$(cat "$KEY_FILE")
+#fi
 
 #if [[ -n "${SPACE_ID:-}" ]]; then
 #  if [[ -n "${ADMIN_USER_EMAIL:-}" && -n "${ADMIN_USER_PASSWORD:-}" ]]; then
@@ -65,6 +65,9 @@ fi
 #  export WEBUI_URL="${SPACE_HOST}"
 #fi
 
-source .venv/bin/activate
-exec env SECRET_KEY="${SECRET_KEY:-}" \
-  "gunicorn -c gunicorn.conf.py"
+mkdir -p logs/
+touch .env
+#source .venv/bin/activate
+#exec env SECRET_KEY="${SECRET_KEY:-}" \
+#  "gunicorn -c gunicorn.conf.py"
+exec .venv/bin/gunicorn -c gunicorn.conf.py

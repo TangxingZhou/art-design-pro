@@ -156,6 +156,45 @@ class Audit(BaseConfig):
         return [path.lstrip('/') for path in value if path]
 
 
+class Otel(BaseConfig):
+    ENABLE: bool = False
+    ENABLE_METRICS: bool = False
+    ENABLE_TRACES: bool = False
+    ENABLE_LOGS: bool = False
+    BASIC_AUTH_PASSWORD: str = ''
+    BASIC_AUTH_USERNAME: str = ''
+    EXPORTER_ENDPOINT: str = 'http://localhost:4317'
+    EXPORTER_INSECURE: bool = False
+    SPAN_EXPORTER: Literal['grpc', 'http'] = 'grpc'
+    SERVICE_NAME: str = 'backend-example'
+    RESOURCE_ATTRIBUTES = ''  # e.g. key1=val1,key2=val2
+    LOGS_EXPORTER_ENDPOINT: Optional[str] = None
+    LOGS_EXPORTER_INSECURE: Optional[bool] = None
+    LOGS_BASIC_AUTH_USERNAME: Optional[str] = None
+    LOGS_BASIC_AUTH_PASSWORD: Optional[str] = None
+    LOGS_SPAN_EXPORTER: Optional[str] = None
+    METRICS_BASIC_AUTH_USERNAME: Optional[str] = None
+    METRICS_BASIC_AUTH_PASSWORD: Optional[str] = None
+    METRICS_EXPORTER_ENDPOINT: Optional[str] = None
+    METRICS_EXPORTER_INSECURE: Optional[bool] = None
+    METRICS_EXPORT_INTERVAL_MILLIS: int = 10000
+    METRICS_SPAN_EXPORTER: Optional[str] = None
+    TRACES_SAMPLER: str = 'parentbased_always_on'
+
+    @model_validator(mode='after')
+    def _validate_after(self):
+        self.LOGS_EXPORTER_ENDPOINT = self.LOGS_EXPORTER_ENDPOINT or self.EXPORTER_ENDPOINT
+        self.LOGS_EXPORTER_INSECURE = self.LOGS_EXPORTER_INSECURE or self.EXPORTER_INSECURE
+        self.LOGS_BASIC_AUTH_USERNAME = self.LOGS_BASIC_AUTH_USERNAME or self.BASIC_AUTH_USERNAME
+        self.LOGS_BASIC_AUTH_PASSWORD = self.LOGS_BASIC_AUTH_PASSWORD or self.BASIC_AUTH_PASSWORD
+        self.LOGS_SPAN_EXPORTER = self.LOGS_SPAN_EXPORTER or self.SPAN_EXPORTER
+        self.METRICS_EXPORTER_ENDPOINT = self.METRICS_EXPORTER_ENDPOINT or self.EXPORTER_ENDPOINT
+        self.METRICS_EXPORTER_INSECURE = self.METRICS_EXPORTER_INSECURE or self.EXPORTER_INSECURE
+        self.METRICS_BASIC_AUTH_USERNAME = self.METRICS_BASIC_AUTH_USERNAME or self.BASIC_AUTH_USERNAME
+        self.METRICS_BASIC_AUTH_PASSWORD = self.METRICS_BASIC_AUTH_PASSWORD or self.BASIC_AUTH_PASSWORD
+        self.METRICS_SPAN_EXPORTER = self.METRICS_SPAN_EXPORTER or self.SPAN_EXPORTER
+
+
 class AioHttp(BaseConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     CLIENT_TIMEOUT: Optional[float] = None
@@ -340,7 +379,7 @@ class OAuth(BaseConfig):
     ENABLE_BACKCHANNEL_LOGOUT: bool = False
 
 
-class Ldap(BaseModel):
+class Ldap(BaseConfig):
     ENABLE: bool = False
     SERVER_LABEL: str = 'LDAP Server'
     SERVER_HOST: str = 'localhost'
@@ -360,7 +399,7 @@ class Ldap(BaseModel):
     ATTRIBUTE_FOR_GROUPS: str = 'memberOf'
 
 
-class Ui(BaseModel):
+class Ui(BaseConfig):
     ENABLE_SIGNUP: bool = True
     ENABLE_LOGIN_FORM: bool = True
     ENABLE_PASSWORD_CHANGE_FORM: bool = True
@@ -565,6 +604,7 @@ class Settings(BaseSettings):
     DATABASE: Optional[DataBase] = None
     REDIS: Optional[Redis] = Redis()
     ZMQ: Optional[Zmq] = Zmq()
+    OTEL: Otel = Otel()
     SYSTEM: Optional[System] = System()
     SPEC: Optional[Spec] = Spec()
 
@@ -741,6 +781,18 @@ def parse_settings(settings_class: type[Settings] = Settings, args_parser: Optio
         # cli_args=cli_args,
         cli_settings_source=CliSettingsSource(settings_class, root_parser=args_parser),
     )
+    if not settings.SECRET_KEY:
+        if os.path.isfile(BASE_DIR / '.secret_key'):
+            with open(BASE_DIR / '.secret_key') as secret_file:
+                secret_key = secret_file.read().strip('\n')
+        else:
+            secret_key = secrets.token_urlsafe(32)
+            with open(BASE_DIR / '.secret_key', 'w') as secret_file:
+                secret_file.write(secret_key)
+        settings.SECRET_KEY = secret_key
+    else:
+        with open(BASE_DIR / '.secret_key', 'w') as secret_file:
+            secret_file.write(settings.SECRET_KEY)
     if settings.SYSTEM is not None:
         from models.config import Config
 

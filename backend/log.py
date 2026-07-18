@@ -1,5 +1,6 @@
 import os
 import yaml
+from datetime import datetime
 from typing import Any
 from pathlib import Path
 import logging.config
@@ -34,27 +35,30 @@ class CustomJsonFormatter(JsonFormatter):
                     "client_addr": client_addr,
                     "request_line": f"{method} {path} HTTP/{http_version}",
                     "status_code": int(status_code),
+                    "request_method": method,
+                    "request_path": path,
+                    "http_version": http_version,
+                    "date_time": datetime.now().isoformat(),
                 }
             )
         elif record.name == "gunicorn.access":
-            log_data.update(
-              {
-                  "client_addr": record.args.get("h"),
-                  "remote_user": record.args.get("u"),
-                  "datetime": record.args.get("t")[1:-1],
-                  "request_line": record.args.get("r"),
-                  # "request_method": record.args.get("m"),
-                  # "request_path": record.args.get("U"),
-                  "query_string": record.args.get("q"),
-                  # "http_version": record.args.get("H"),
-                  "status_code": int(record.args.get("s")),
-                  "response": record.args.get("b"),
-                  "referer": record.args.get("f"),
-                  "user_agent": record.args.get("a"),
-                  "duration_ms": record.args.get("M"),
-              }
-          )
-        if os.getenv('ENABLE_OTEL', 'false').lower() == 'true':
+            access_log = {
+                "client_addr": record.args.get("h"),
+                "remote_user": record.args.get("u"),
+                "date_time": datetime.strptime(record.args.get("t"), "[%d/%b/%Y:%H:%M:%S %z]").isoformat(),
+                "request_line": record.args.get("r"),
+                "request_method": record.args.get("m"),
+                "request_path": record.args.get("U"),
+                "query_string": record.args.get("q"),
+                "http_version": record.args.get("H"),
+                "status_code": int(record.args.get("s")),
+                # "response": record.args.get("B"),
+                "referer": record.args.get("f"),
+                "user_agent": record.args.get("a"),
+                "duration_ms": record.args.get("M"),
+            }
+            log_data.update(access_log)
+        if os.getenv('OTEL__ENABLE', 'false').lower() == 'true':
             from opentelemetry import trace
 
             extras = {}

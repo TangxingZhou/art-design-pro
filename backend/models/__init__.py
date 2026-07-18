@@ -7,6 +7,7 @@ from .functions import Function
 from .groups import Group, GroupMember
 from .oauth_sessions import OAuthSession
 from .users import User, ApiKey
+from .logs import AccessLog
 
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "OAuthSession",
     "User",
     "ApiKey",
+    "AccessLog",
 ]

@@ -45,7 +45,7 @@ formatters:
       # account: {{ ACCOUNT | default('test') }}
   uvicorn-access:
     (): ext://log.CustomJsonFormatter
-    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(client_addr)s %(request_line)s %(status_code)s'
+    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(client_addr)s %(request_method)s %(request_path)s %(http_version)s %(request_line)s %(status_code)s %(date_time)s'
     datefmt: '%Y-%m-%d %H:%M:%S'
     timestamp: true
     json_indent: null
@@ -58,7 +58,7 @@ formatters:
       env: {{ ENV | default('dev') }}
   gunicorn-access:
     (): ext://log.CustomJsonFormatter
-    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(client_addr)s %(remote_user)s %(user_agent)s %(request_line)s %(query_string)s %(status_code)s %(response)s %(referer)s %(datetime)s %(duration_ms)s'
+    format: '%(asctime)s %(levelname)s %(name)s %(module)s %(filename)s %(funcName)s %(lineno)s %(client_addr)s %(remote_user)s %(user_agent)s %(request_method)s %(request_path)s %(http_version)s %(request_line)s %(query_string)s %(status_code)s %(response)s %(referer)s %(date_time)s %(duration_ms)s'
     datefmt: '%Y-%m-%d %H:%M:%S'
     timestamp: true
     json_indent: null

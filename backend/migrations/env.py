@@ -12,6 +12,7 @@ if app_config.settings is None:
 else:
     settings = app_config.get_settings()
 from utils.db import metadata_obj, enable_iam_token_auth, extract_ssl_params_from_url, reattach_ssl_params_to_url
+from sqlmodel import SQLModel
 from models import *
 from sqlalchemy import create_engine, engine_from_config, pool
 
@@ -25,9 +26,12 @@ if alembic_config.config_file_name:
 #         log_handler.setFormatter(JSONFormatter())
 # from log import logger
 
+target_metadata = [metadata_obj, SQLModel.metadata]
 # DATABASE_URL = os.getenv('DATABASE__URL', 'sqlite:///example.db')
 # DATABASE_PASSWORD = os.getenv('DATABASE__PASSWORD')
 target_db_url = settings.DATABASE.URL
+# if bool(target_db_url) and any(target_db_url.startswith(p) for p in ('postgresql://', 'postgresql+', 'postgres://')):
+#     from models.logs import AccessLog
 base_url, ssl_query_params = extract_ssl_params_from_url(target_db_url)
 if ssl_query_params:
     target_db_url = reattach_ssl_params_to_url(base_url, ssl_query_params)
@@ -40,7 +44,7 @@ def run_migrations_offline() -> None:
     db_connection_url = alembic_config.get_main_option('sqlalchemy.url')
     alembic.context.configure(
         url=db_connection_url,
-        target_metadata=metadata_obj,
+        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={'paramstyle': 'named'},
     )
@@ -80,7 +84,7 @@ def run_migrations_online() -> None:
     with live_connectable.connect() as live_connection:
         alembic.context.configure(
             connection=live_connection,
-            target_metadata=metadata_obj,
+            target_metadata=target_metadata,
         )
         with alembic.context.begin_transaction():
             alembic.context.run_migrations()
