@@ -66,7 +66,6 @@ cd "$SCRIPT_DIR/.." || exit 1
 #fi
 
 mkdir -p logs/
-touch .env
 #source .venv/bin/activate
 #exec env SECRET_KEY="${SECRET_KEY:-}" \
 #  "gunicorn -c gunicorn.conf.py"
