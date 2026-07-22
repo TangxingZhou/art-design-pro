@@ -167,7 +167,7 @@ class Otel(BaseConfig):
     EXPORTER_INSECURE: bool = False
     SPAN_EXPORTER: Literal['grpc', 'http'] = 'grpc'
     SERVICE_NAME: str = 'backend-example'
-    RESOURCE_ATTRIBUTES = ''  # e.g. key1=val1,key2=val2
+    RESOURCE_ATTRIBUTES: str = ''  # e.g. key1=val1,key2=val2
     LOGS_EXPORTER_ENDPOINT: Optional[str] = None
     LOGS_EXPORTER_INSECURE: Optional[bool] = None
     LOGS_BASIC_AUTH_USERNAME: Optional[str] = None
@@ -193,6 +193,7 @@ class Otel(BaseConfig):
         self.METRICS_BASIC_AUTH_USERNAME = self.METRICS_BASIC_AUTH_USERNAME or self.BASIC_AUTH_USERNAME
         self.METRICS_BASIC_AUTH_PASSWORD = self.METRICS_BASIC_AUTH_PASSWORD or self.BASIC_AUTH_PASSWORD
         self.METRICS_SPAN_EXPORTER = self.METRICS_SPAN_EXPORTER or self.SPAN_EXPORTER
+        return self
 
 
 class AioHttp(BaseConfig):
@@ -584,10 +585,13 @@ class Settings(BaseSettings):
     ENV: Literal["dev", "staging", "production"] = "dev"
 
     # DEBUG: bool = True
-    FRONTEND_URL: str = "http://localhost:5173"
+    BACKEND_HOST: str = "127.0.0.1"
+    BACKEND_PORT: int = 8000
+    FRONTEND_URL: str = "http://localhost:4173"
 
     SECRET_KEY: str = "85e6545531e0551b09c9f11f470d7db10979a4b0c1ea9a4605652ef5772dd143"  # openssl rand -hex 32
-    # SECRET_KEY: str = secrets.token_urlsafe(32)
+    SECRET_KEY_LENGTH: int = 32
+    # SECRET_KEY: str = secrets.token_hex(32)
     # ENABLE_AUTH: bool = True
     # JWT_ALGORITHM: str = "HS256"
     # JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
@@ -612,7 +616,7 @@ class Settings(BaseSettings):
     # BACKEND_CORS_ORIGINS: Annotated[
     #     list[AnyUrl] | str, BeforeValidator(parse_cors)
     # ] = []
-    # CORS_ALLOW_ORIGINS: list[str] = ['http://localhost:5173', 'http://localhost:8000']
+    # CORS_ALLOW_ORIGINS: list[str] = ['http://localhost:4173', 'http://localhost:8000']
     CORS_ALLOW_CUSTOM_SCHEME: list[str] = []
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: List = ["*"]
@@ -649,7 +653,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_after(self) -> Self:
-        self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
+        # self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
+        with open(BASE_DIR / '.secret_key', 'r+') as secret_file:
+            if len(self.SECRET_KEY) != self.SECRET_KEY_LENGTH:
+                secret_key = secret_file.read().strip('\n').strip()
+                if len(secret_key) == self.SECRET_KEY_LENGTH:
+                    self.SECRET_KEY = secret_key
+                else:
+                    self.SECRET_KEY = secrets.token_hex(self.SECRET_KEY_LENGTH)
+            secret_file.write(self.SECRET_KEY)
         # self._check_default_secret(
         #     "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         # )
@@ -781,18 +793,6 @@ def parse_settings(settings_class: type[Settings] = Settings, args_parser: Optio
         # cli_args=cli_args,
         cli_settings_source=CliSettingsSource(settings_class, root_parser=args_parser),
     )
-    if not settings.SECRET_KEY:
-        if os.path.isfile(BASE_DIR / '.secret_key'):
-            with open(BASE_DIR / '.secret_key') as secret_file:
-                secret_key = secret_file.read().strip('\n')
-        else:
-            secret_key = secrets.token_urlsafe(32)
-            with open(BASE_DIR / '.secret_key', 'w') as secret_file:
-                secret_file.write(secret_key)
-        settings.SECRET_KEY = secret_key
-    else:
-        with open(BASE_DIR / '.secret_key', 'w') as secret_file:
-            secret_file.write(settings.SECRET_KEY)
     if settings.SYSTEM is not None:
         from models.config import Config
 

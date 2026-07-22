@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime
 
+from sqlmodel import Field, SQLModel, func
 from tortoise import fields, models
 
 from config import settings
@@ -60,3 +61,19 @@ class UUIDModel:
 class TimestampMixin:
     created_at = fields.DatetimeField(auto_now_add=True, index=True)
     updated_at = fields.DatetimeField(auto_now=True, index=True)
+
+
+class DateTimeMixin(SQLModel):
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        index=True,
+        sa_column_kwargs={"server_default": func.now()}
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        index=True,
+        sa_column_kwargs={
+            "server_default": func.now(),
+            "onupdate": func.now()
+        }
+    )

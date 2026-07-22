@@ -34,6 +34,7 @@ log = logging.getLogger(__name__)
 SESSION_SECRET = settings.SECRET_KEY
 ALGORITHM = 'HS256'
 PASSWORD_BCRYPT_MAX_BYTES = 72
+PASSWORD_HASH_PREFIXES = ("$2a$", "$2b$", "$2y$", "$argon2")
 
 ##############
 # Auth Utils
@@ -72,16 +73,26 @@ def override_static(path: str, content: str):
 bearer_security = HTTPBearer(auto_error=False)
 
 
-async def get_password_hash(password: str) -> str:
-    """Hash a password using the configured algorithm in a thread pool."""
+def is_password_hash(value: str) -> bool:
+    """Return whether a value looks like a supported password hash."""
+    return value.startswith(PASSWORD_HASH_PREFIXES)
+
+
+def sync_get_password_hash(password: str) -> str:
+    """Synchronously hash a password using the configured algorithm."""
     if settings.SYSTEM.AUTH.PASSWORD_HASH_ALGORITHM == 'argon2':
         from argon2 import PasswordHasher
 
-        return await asyncio.to_thread(PasswordHasher().hash, password)
+        return PasswordHasher().hash(password)
     if settings.SYSTEM.AUTH.PASSWORD_HASH_ALGORITHM == 'bcrypt':
-        return (await asyncio.to_thread(bcrypt.hashpw, password.encode('utf-8'), bcrypt.gensalt())).decode('utf-8')
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
     raise ValueError(f'Unsupported PASSWORD_HASH_ALGORITHM: {settings.SYSTEM.AUTH.PASSWORD_HASH_ALGORITHM}')
+
+
+async def get_password_hash(password: str) -> str:
+    """Hash a password without blocking the event loop."""
+    return await asyncio.to_thread(sync_get_password_hash, password)
 
 
 def validate_password(password: str) -> bool:

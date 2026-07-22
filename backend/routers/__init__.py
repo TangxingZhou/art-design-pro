@@ -15,7 +15,7 @@ from .events import router as events_router
 
 api_router = APIRouter()
 api_router.include_router(admin_router, prefix='/admin', tags=['admin'])
-api_router.include_router(admin_router, prefix='/console', tags=['console'])
+api_router.include_router(console_router, prefix='/console', tags=['console'])
 api_router.include_router(system_router, prefix='', tags=['system'])
 api_router.include_router(configs_router, prefix='/configs', tags=['configs'])
 api_router.include_router(auths_router, prefix='/auths', tags=['auths'])
