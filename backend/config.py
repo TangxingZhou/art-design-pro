@@ -597,7 +597,7 @@ class Settings(BaseSettings):
     # JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     # JWT_EXPIRES_IN: str = '1w'
 
-    ENABLE_DB_MIGRATIONS: bool = True
+    ENABLE_DB_MIGRATIONS: bool = False
     ENABLE_OTEL: bool = False
     # SENTRY_DSN: HttpUrl | None = None
 

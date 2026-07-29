@@ -67,6 +67,7 @@ def _get_engine_connectable():
 
             cipher_conn = sqlcipher3.connect(raw_db_path, check_same_thread=False)
             cipher_conn.execute(f"PRAGMA key = '{DATABASE_PASSWORD}'")
+            cipher_conn.execute("PRAGMA foreign_keys=ON")
             return cipher_conn
 
         return create_engine('sqlite://', creator=_sqlite_cipher_creator, echo=False)
@@ -82,12 +83,37 @@ def run_migrations_online() -> None:
     live_connectable = _get_engine_connectable()
     enable_iam_token_auth(live_connectable)
     with live_connectable.connect() as live_connection:
-        alembic.context.configure(
-            connection=live_connection,
-            target_metadata=target_metadata,
-        )
-        with alembic.context.begin_transaction():
-            alembic.context.run_migrations()
+        is_sqlite = live_connection.dialect.name == "sqlite"
+        if is_sqlite:
+            # Alembic's SQLite batch mode rebuilds tables. A referenced table
+            # cannot be rebuilt while FK enforcement is active, so suspend it
+            # for this migration connection and validate all references before
+            # restoring enforcement.
+            live_connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            live_connection.commit()
+        try:
+            alembic.context.configure(
+                connection=live_connection,
+                target_metadata=target_metadata,
+            )
+            with alembic.context.begin_transaction():
+                alembic.context.run_migrations()
+
+            if is_sqlite:
+                violations = live_connection.exec_driver_sql(
+                    "PRAGMA foreign_key_check"
+                ).fetchall()
+                live_connection.commit()
+                if violations:
+                    raise RuntimeError(
+                        f"foreign key violations after migrations: {violations!r}"
+                    )
+        finally:
+            if is_sqlite:
+                if live_connection.in_transaction():
+                    live_connection.rollback()
+                live_connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                live_connection.commit()
 
 
 # Alembic execution entrypoint branch

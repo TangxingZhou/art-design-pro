@@ -197,6 +197,8 @@ async def upload_file_handler(
         }
         try:
             contents, file_path = await asyncio.to_thread(Storage.upload_file, file.file, filename, tags)
+            if UPLOAD_DIR.parent.parent.as_posix() in file_path:
+                file_path = Path(file_path).relative_to(UPLOAD_DIR.parent.parent).as_posix()
         except OSError as e:
             if e.errno != errno.ENAMETOOLONG:
                 log.exception(e)

@@ -234,6 +234,7 @@ if SQLALCHEMY_DATABASE_URL.startswith('sqlite+sqlcipher://'):
 
         conn = sqlcipher3.connect(db_path, check_same_thread=False)
         conn.execute(f"PRAGMA key = '{database_password}'")
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     # The dummy "sqlite://" URL would cause SQLAlchemy to auto-select
@@ -269,6 +270,7 @@ elif 'sqlite' in SQLALCHEMY_DATABASE_URL:
     def _apply_sqlite_pragmas(dbapi_connection):
         """Apply all configured SQLite PRAGMAs to a raw DBAPI connection."""
         cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
         if settings.DATABASE.ENABLE_SQLITE_WAL:
             cursor.execute('PRAGMA journal_mode=WAL')
         else:

@@ -19,5 +19,6 @@ logs/
 *.db-shm
 *.db-wal
 
+data/uploads/
 .secret_key
 .env

@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime
-
+from uuid import UUID
+from pydantic import BaseModel as PBaseModel
+from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel, func
 from tortoise import fields, models
 
@@ -77,3 +79,11 @@ class DateTimeMixin(SQLModel):
             "onupdate": func.now()
         }
     )
+
+
+class ResponseModel(PBaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    created_at: datetime
+    updated_at: datetime

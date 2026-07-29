@@ -34,7 +34,7 @@ from models.auths import Auths
 from models.config import Config
 from models.groups import GroupForm, GroupModel, Groups, GroupUpdateForm
 from models.oauth_sessions import OAuthSessions
-from models.users import Users
+from models.users import UserAlreadyExistsError, Users
 from utils.utils import validate_url
 from utils.auth import create_token, get_password_hash
 from utils.groups import apply_default_group_assignment
@@ -962,6 +962,7 @@ class OAuthManager:
                         email=email,
                         password=await get_password_hash(str(uuid.uuid4())),  # Random password, not used
                         name=name,
+                        username=name,
                         profile_image_url=picture_url,
                         role=await self.get_user_role(None, user_data),
                         oauth=oauth_data,
@@ -1010,7 +1011,11 @@ class OAuthManager:
         except Exception as e:
             log.error(f'Error during OAuth process: {e}')
             error_message = (
-                e.detail
+                ERROR_MESSAGES.USERNAME_TAKEN
+                if isinstance(e, UserAlreadyExistsError) and e.field == 'username'
+                else ERROR_MESSAGES.EMAIL_TAKEN
+                if isinstance(e, UserAlreadyExistsError)
+                else e.detail
                 if isinstance(e, HTTPException) and e.detail
                 else ERROR_MESSAGES.DEFAULT('Error during OAuth process')
             )

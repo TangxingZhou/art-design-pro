@@ -51,6 +51,7 @@ from models.groups import Groups
 from models.oauth_sessions import OAuthSessions
 from models.users import (
     UpdateProfileForm,
+    UserAlreadyExistsError,
     UserModel,
     UserProfileImageResponse,
     Users,
@@ -80,6 +81,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter()
 
 log = logging.getLogger(__name__)
+
+
+def _user_conflict_exception(error: UserAlreadyExistsError) -> HTTPException:
+    detail = (
+        ERROR_MESSAGES.USERNAME_TAKEN
+        if error.field == 'username'
+        else ERROR_MESSAGES.EMAIL_TAKEN
+    )
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
 
 # Forgive us our failed attempts, as we forgive those
 # who exceed their allotted rate against this gate.
@@ -579,6 +590,7 @@ async def ldap_auth(
                         email=email,
                         password=str(uuid.uuid4()),
                         name=cn,
+                        username=username_list[0],
                         role=await Config.get('ui.default_user_role'),
                         db=db,
                     )
@@ -607,6 +619,8 @@ async def ldap_auth(
                         data={'role': user.role},
                     )
 
+                except UserAlreadyExistsError as err:
+                    raise _user_conflict_exception(err) from err
                 except HTTPException:
                     raise
                 except Exception as err:
@@ -630,6 +644,8 @@ async def ldap_auth(
                 raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
         else:
             raise HTTPException(400, 'User record mismatch.')
+    except HTTPException:
+        raise
     except Exception as e:
         log.error(f'LDAP authentication error: {str(e)}')
         raise HTTPException(400, detail='LDAP authentication failed.')
@@ -727,15 +743,24 @@ async def signin(
                 db=db,
             )
     else:
-        if signin_rate_limiter.is_limited(form_data.email.lower()):
+        if form_data.email is not None:
+            identity = form_data.email.lower()
+            rate_limit_key = identity
+            authenticate = Auths.authenticate_user
+        else:
+            identity = form_data.username.lower()
+            rate_limit_key = f'username:{identity}'
+            authenticate = Auths.authenticate_user_by_username
+
+        if signin_rate_limiter.is_limited(rate_limit_key):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
             )
 
-        user = await Auths.authenticate_user(
-            form_data.email.lower(),
-            lambda pw: verify_password(form_data.password, pw),
+        user = await authenticate(
+            identity,
+            lambda password_hash: verify_password(form_data.password, password_hash),
             db=db,
         )
 
@@ -756,6 +781,7 @@ async def signup_handler(
     password: str,
     name: str,
     profile_image_url: str = '/user.png',
+    username: str | None = None,
     *,
     db: AsyncSession,
     source: str = 'api',
@@ -772,14 +798,18 @@ async def signup_handler(
     # first-user registration can all see an empty table and each get admin.
     hashed = await get_password_hash(password)
 
-    user = await Auths.insert_new_auth(
-        email=email.lower(),
-        password=hashed,
-        name=name,
-        profile_image_url=profile_image_url,
-        role=await Config.get('ui.default_user_role'),
-        db=db,
-    )
+    try:
+        user = await Auths.insert_new_auth(
+            email=email.lower(),
+            password=hashed,
+            name=name,
+            profile_image_url=profile_image_url,
+            role=await Config.get('ui.default_user_role'),
+            username=username,
+            db=db,
+        )
+    except UserAlreadyExistsError as err:
+        raise _user_conflict_exception(err) from err
     if not user:
         raise HTTPException(500, detail=ERROR_MESSAGES.CREATE_USER_ERROR)
 
@@ -832,7 +862,7 @@ async def signup(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT)
 
     if await Users.get_user_by_email(form_data.email.lower(), db=db):
-        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
     try:
         try:
@@ -846,6 +876,7 @@ async def signup(
             form_data.password,
             form_data.name,
             form_data.profile_image_url,
+            username=form_data.username,
             db=db,
         )
         await publish_event(
@@ -1016,7 +1047,7 @@ async def add_user(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT)
 
     if await Users.get_user_by_email(form_data.email.lower(), db=db):
-        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
     try:
         try:
@@ -1026,11 +1057,12 @@ async def add_user(
 
         hashed = await get_password_hash(form_data.password)
         user = await Auths.insert_new_auth(
-            form_data.email.lower(),
-            hashed,
-            form_data.name,
-            form_data.profile_image_url,
-            form_data.role,
+            email=form_data.email.lower(),
+            password=hashed,
+            name=form_data.name,
+            profile_image_url=form_data.profile_image_url,
+            role=form_data.role,
+            username=form_data.username,
             db=db,
         )
 
@@ -1062,6 +1094,8 @@ async def add_user(
             }
         else:
             raise HTTPException(500, detail=ERROR_MESSAGES.CREATE_USER_ERROR)
+    except UserAlreadyExistsError as err:
+        raise _user_conflict_exception(err) from err
     except HTTPException:
         raise
     except Exception as err:

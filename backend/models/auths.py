@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import bcrypt
-from utils.db import Base, JSONField, get_async_db_context
-from models.users import User, UserModel, UserProfileImageResponse, Users
+from utils.db import Base, get_async_db_context
+from models.users import (
+    USERNAME_MAX_LENGTH,
+    User,
+    UserModel,
+    UserProfileImageResponse,
+    Users,
+    normalize_username,
+)
 from utils.validate import validate_profile_image_url
-from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Column, String, Text, delete, select, update
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import Boolean, Column, String, Text, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
@@ -20,6 +28,7 @@ log = logging.getLogger(__name__)
 # (unknown user, inactive account) so response timing cannot reveal
 # whether an account exists (CWE-208).
 PLACEHOLDER_HASH = bcrypt.hashpw(b'placeholder', bcrypt.gensalt()).decode('utf-8')
+PasswordVerifier = Callable[[str], Awaitable[bool]]
 
 
 class Auth(Base):  # credential ↔ user linkage
@@ -58,8 +67,25 @@ class SigninResponse(Token, UserProfileImageResponse):
 
 
 class SigninForm(BaseModel):
-    email: str
+    email: str | None = Field(default=None, min_length=1)
+    username: str | None = Field(default=None, min_length=1, max_length=50)
     password: str
+
+    @field_validator('email', 'username')
+    @classmethod
+    def normalize_identity(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('login identity cannot be blank')
+        return normalized
+
+    @model_validator(mode='after')
+    def require_one_identity(self) -> 'SigninForm':
+        if (self.email is None) == (self.username is None):
+            raise ValueError('provide exactly one of email or username')
+        return self
 
 
 class LdapForm(BaseModel):
@@ -79,8 +105,16 @@ class UpdatePasswordForm(BaseModel):
 class SignupForm(BaseModel):
     name: str
     email: str
+    username: str | None = Field(default=None, max_length=USERNAME_MAX_LENGTH)
     password: str
     profile_image_url: str | None = '/user.png'
+
+    @field_validator('username', mode='before')
+    @classmethod
+    def normalize_optional_username(cls, value: str | None) -> str | None:
+        # Treat an empty optional input as omitted so creation can derive the
+        # default username from the display name.
+        return normalize_username(value)
 
     @field_validator('profile_image_url')
     @classmethod
@@ -107,6 +141,7 @@ class AuthsTable:
         name: str,
         profile_image_url: str = '/user.png',
         role: str = 'pending',
+        username: str | None = None,
         oauth: dict | None = None,
         db: AsyncSession | None = None,
     ) -> UserModel | None:
@@ -124,41 +159,78 @@ class AuthsTable:
             )
             session.add(credential)
 
-            created_user = await Users.insert_new_user(
-                new_id,
-                name,
-                email,
-                profile_image_url,
-                role,
-                oauth=oauth,
-                db=session,
-            )
-            # persist both records and reload generated defaults
-            await session.commit()
-            await session.refresh(credential)
-            return created_user if credential and created_user else None
+            try:
+                created_user = await Users.insert_new_user(
+                    new_id,
+                    name,
+                    email,
+                    profile_image_url,
+                    role,
+                    username=username,
+                    oauth=oauth,
+                    db=session,
+                )
+                # persist both records and reload generated defaults
+                await session.commit()
+                await session.refresh(credential)
+                return created_user if credential and created_user else None
+            except Exception:
+                await session.rollback()
+                raise
 
-    async def authenticate_user(
+    async def _authenticate_user_by_identity(
         self,
-        email: str,
-        verify_password: callable,
+        identity: str,
+        identity_column: Any,
+        verify_password: PasswordVerifier,
         db: AsyncSession | None = None,
     ) -> UserModel | None:
-        """Verify email + password credentials and return the matching user."""
-        log.info('authenticate_user: %s', email)
-        resolved = await Users.get_user_by_email(email, db=db)
-        if not resolved:
-            await verify_password(PLACEHOLDER_HASH)
-            return
-        # load the credential row and verify the password hash
+        """Authenticate one unambiguous user identity without leaking account state."""
+        normalized_identity = identity.strip().lower()
         async with get_async_db_context(db) as session:
-            credential = await session.get(Auth, resolved.id)
+            query = (
+                select(Auth, User)
+                .join(User, Auth.id == User.id)
+                .where(func.lower(identity_column) == normalized_identity)
+                .limit(2)
+            )
+            matches = (await session.execute(query)).all()
+
+            # Usernames are not yet constrained as unique in every deployed
+            # database. Never select an arbitrary account when duplicates exist.
+            if len(matches) != 1:
+                if len(matches) > 1:
+                    log.warning('Multiple users matched the login identity column %s', identity_column.key)
+                await verify_password(PLACEHOLDER_HASH)
+                return
+
+            credential, user = matches[0]
             if not credential or not credential.active:
                 await verify_password(PLACEHOLDER_HASH)
                 return
             if not await verify_password(credential.password):
                 return
-            return resolved
+            return UserModel.model_validate(user)
+
+    async def authenticate_user(
+        self,
+        email: str,
+        verify_password: PasswordVerifier,
+        db: AsyncSession | None = None,
+    ) -> UserModel | None:
+        """Verify email + password credentials and return the matching user."""
+        log.info('authenticate_user: %s', email)
+        return await self._authenticate_user_by_identity(email, User.email, verify_password, db=db)
+
+    async def authenticate_user_by_username(
+        self,
+        username: str,
+        verify_password: PasswordVerifier,
+        db: AsyncSession | None = None,
+    ) -> UserModel | None:
+        """Verify username + password credentials and return the matching user."""
+        log.info('authenticate_user_by_username')
+        return await self._authenticate_user_by_identity(username, User.username, verify_password, db=db)
 
     async def authenticate_user_by_api_key(
         self,

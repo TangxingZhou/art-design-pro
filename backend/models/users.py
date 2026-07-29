@@ -15,6 +15,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     Date,
+    Index,
     String,
     Text,
     case,
@@ -27,9 +28,43 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = None
+USERNAME_MAX_LENGTH = 50
+
+
+def normalize_username(
+    username: str | None,
+    *,
+    fallback_name: str | None = None,
+) -> str | None:
+    """Return the canonical lowercase username used for storage and lookup.
+
+    Explicit usernames keep internal whitespace but lose surrounding
+    whitespace. When no username is supplied, all whitespace is removed from
+    the display name as required by the default-generation rule.
+    """
+    if username is None or not str(username).strip():
+        if fallback_name is None:
+            return None
+        normalized = ''.join(str(fallback_name).lower().split())
+        # Generated usernames must fit the database column. Explicit values
+        # are length-validated by request schemas instead of being truncated.
+        normalized = normalized[:USERNAME_MAX_LENGTH]
+    else:
+        normalized = str(username).strip().lower()
+
+    return normalized or None
+
+
+class UserAlreadyExistsError(ValueError):
+    """Raised when a user identity conflicts with an existing account."""
+
+    def __init__(self, field: str):
+        self.field = field
+        super().__init__(f'{field} already exists')
 
 
 ####################
@@ -51,7 +86,7 @@ class User(Base):  # identity & profile
     __tablename__: str = 'user'  # Identity & Credentials
     id = Column(String, primary_key=True, unique=True)  # unique user id
     email = Column(String, unique=True)  # user email address
-    username = Column(String(50), nullable=True)  # custom handle
+    username = Column(String(USERNAME_MAX_LENGTH), nullable=True)  # custom handle
     role = Column(String, default='pending')  # permissions role
     name = Column(String, nullable=False)  # display name
 
@@ -79,6 +114,11 @@ class User(Base):  # identity & profile
     last_active_at = Column(BigInteger)
     updated_at = Column(BigInteger)
     created_at = Column(BigInteger)
+
+
+# Multiple NULL usernames remain valid, while non-NULL values are unique
+# regardless of case on both SQLite and PostgreSQL.
+Index('uq_user_username_lower', func.lower(User.username), unique=True)
 
 
 _DEFAULT_PROFILE_IMAGE_URL = '/api/v1/users/{user_id}/profile/image'
@@ -270,6 +310,29 @@ class UserUpdateForm(BaseModel):
 
 
 class UsersTable:
+    @staticmethod
+    async def _get_conflicting_identity(
+        session: AsyncSession,
+        *,
+        email: str,
+        username: str | None,
+    ) -> str | None:
+        if username is not None:
+            username_match = await session.scalar(
+                select(User.id)
+                .where(func.lower(User.username) == username)
+                .limit(1)
+            )
+            if username_match is not None:
+                return 'username'
+
+        email_match = await session.scalar(
+            select(User.id)
+            .where(func.lower(User.email) == email.strip().lower())
+            .limit(1)
+        )
+        return 'email' if email_match is not None else None
+
     async def insert_new_user(
         self,
         id: str,
@@ -286,25 +349,47 @@ class UsersTable:
         except ValueError:
             profile_image_url = '/user.png'
 
+        normalized_email = email.strip().lower()
+        normalized_username = normalize_username(username, fallback_name=name)
+
         async with get_async_db_context(db) as session:
+            conflicting_field = await self._get_conflicting_identity(
+                session,
+                email=normalized_email,
+                username=normalized_username,
+            )
+            if conflicting_field is not None:
+                raise UserAlreadyExistsError(conflicting_field)
+
             user = UserModel(
                 **{
                     'id': id,
-                    'email': email,
+                    'email': normalized_email,
                     'name': name,
                     'role': role,
                     'profile_image_url': profile_image_url,
                     'last_active_at': int(time.time()),
                     'created_at': int(time.time()),
                     'updated_at': int(time.time()),
-                    'username': username,
+                    'username': normalized_username,
                     'oauth': oauth,
                 }
             )
             result = User(**user.model_dump())
             session.add(result)
-            await session.commit()
-            await session.refresh(result)
+            try:
+                await session.commit()
+                await session.refresh(result)
+            except IntegrityError:
+                await session.rollback()
+                conflicting_field = await self._get_conflicting_identity(
+                    session,
+                    email=normalized_email,
+                    username=normalized_username,
+                )
+                if conflicting_field is not None:
+                    raise UserAlreadyExistsError(conflicting_field) from None
+                raise
             return user if result else None
 
     # database read methods
@@ -348,6 +433,22 @@ class UsersTable:
             return UserModel.model_validate(match)
         # --- context manager above always returns ---
         return
+
+    async def get_user_by_username(
+        self,
+        username: str,
+        db: AsyncSession | None = None,
+    ) -> UserModel | None:
+        """Fetch a username case-insensitively."""
+        normalized_username = normalize_username(username)
+        if normalized_username is None:
+            return None
+        async with get_async_db_context(db) as session:
+            query = select(User).where(
+                func.lower(User.username) == normalized_username
+            )
+            match = (await session.execute(query)).scalars().one_or_none()
+            return UserModel.model_validate(match) if match else None
 
     # --- oauth & integrations ---
     async def get_user_by_oauth_sub(
