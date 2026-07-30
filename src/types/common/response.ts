@@ -23,8 +23,10 @@
 export interface BaseResponse<T = unknown> {
   /** 状态码 */
   code: number
-  /** 消息 */
-  msg: string
+  /** 项目原有接口消息 */
+  msg?: string
+  /** FastAPI CRUD 接口消息 */
+  message?: string | null
   /** 数据 */
   data: T
 }

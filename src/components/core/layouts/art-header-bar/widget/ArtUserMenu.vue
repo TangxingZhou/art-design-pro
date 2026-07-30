@@ -64,6 +64,7 @@
   import { useRouter } from 'vue-router'
   import { ElMessageBox } from 'element-plus'
   import { useUserStore } from '@/store/modules/user'
+  import { fetchLogout } from '@/api/auth'
   import { WEB_LINKS } from '@/utils/constants'
   import { mittBus } from '@/utils/sys'
 
@@ -115,8 +116,12 @@
         confirmButtonText: t('common.confirm'),
         cancelButtonText: t('common.cancel'),
         customClass: 'login-out-dialog'
-      }).then(() => {
-        userStore.logOut()
+      }).then(async () => {
+        try {
+          await fetchLogout()
+        } finally {
+          userStore.logOut()
+        }
       })
     }, 200)
   }

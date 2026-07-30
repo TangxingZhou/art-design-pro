@@ -18,23 +18,12 @@
             @keyup.enter="handleSubmit"
             style="margin-top: 25px"
           >
-            <ElFormItem prop="account">
-              <ElSelect v-model="formData.account" @change="setupAccount">
-                <ElOption
-                  v-for="account in accounts"
-                  :key="account.key"
-                  :label="account.label"
-                  :value="account.key"
-                >
-                  <span>{{ account.label }}</span>
-                </ElOption>
-              </ElSelect>
-            </ElFormItem>
             <ElFormItem prop="username">
               <ElInput
                 class="custom-height"
                 :placeholder="$t('login.placeholder.username')"
                 v-model.trim="formData.username"
+                autocomplete="username"
               />
             </ElFormItem>
             <ElFormItem prop="password">
@@ -43,12 +32,14 @@
                 :placeholder="$t('login.placeholder.password')"
                 v-model.trim="formData.password"
                 type="password"
-                autocomplete="off"
+                autocomplete="current-password"
                 show-password
               />
             </ElFormItem>
 
-            <!-- 推拽验证 -->
+            <!--
+              推拽验证暂时停用。如需恢复，取消本段注释，并恢复脚本中的
+              isPassing、isClickPass、dragVerify、isDark 与 resetDragVerify 相关代码。
             <div class="relative pb-5 mt-6">
               <div
                 class="relative z-[2] overflow-hidden select-none rounded-lg border border-transparent tad-300"
@@ -72,6 +63,7 @@
                 {{ $t('login.placeholder.slider') }}
               </p>
             </div>
+            -->
 
             <div class="flex-cb mt-2 text-sm">
               <ElCheckbox v-model="formData.rememberPassword">{{
@@ -112,14 +104,14 @@
   import { useUserStore } from '@/store/modules/user'
   import { useI18n } from 'vue-i18n'
   import { HttpError } from '@/utils/http/error'
-  import { fetchLogin } from '@/api/auth'
+  import { fetchGetUserInfo, fetchLogin } from '@/api/auth'
   import { ElNotification, type FormInstance, type FormRules } from 'element-plus'
-  import { useSettingStore } from '@/store/modules/setting'
+  // import { useSettingStore } from '@/store/modules/setting' // 恢复滑块验证时启用
 
   defineOptions({ name: 'Login' })
 
-  const settingStore = useSettingStore()
-  const { isDark } = storeToRefs(settingStore)
+  // const settingStore = useSettingStore()
+  // const { isDark } = storeToRefs(settingStore)
   const { t, locale } = useI18n()
   const formKey = ref(0)
 
@@ -128,53 +120,18 @@
     formKey.value++
   })
 
-  type AccountKey = 'super' | 'admin' | 'user'
-
-  export interface Account {
-    key: AccountKey
-    label: string
-    userName: string
-    password: string
-    roles: string[]
-  }
-
-  const accounts = computed<Account[]>(() => [
-    {
-      key: 'super',
-      label: t('login.roles.super'),
-      userName: 'Super',
-      password: '123456',
-      roles: ['R_SUPER']
-    },
-    {
-      key: 'admin',
-      label: t('login.roles.admin'),
-      userName: 'Admin',
-      password: '123456',
-      roles: ['R_ADMIN']
-    },
-    {
-      key: 'user',
-      label: t('login.roles.user'),
-      userName: 'User',
-      password: '123456',
-      roles: ['R_USER']
-    }
-  ])
-
-  const dragVerify = ref()
+  // const dragVerify = ref() // 恢复滑块验证时启用
 
   const userStore = useUserStore()
   const router = useRouter()
   const route = useRoute()
-  const isPassing = ref(false)
-  const isClickPass = ref(false)
+  // const isPassing = ref(false) // 恢复滑块验证时启用
+  // const isClickPass = ref(false) // 恢复滑块验证时启用
 
   const systemName = AppConfig.systemInfo.name
   const formRef = ref<FormInstance>()
 
   const formData = reactive({
-    account: '',
     username: '',
     password: '',
     rememberPassword: true
@@ -187,18 +144,6 @@
 
   const loading = ref(false)
 
-  onMounted(() => {
-    setupAccount('super')
-  })
-
-  // 设置账号
-  const setupAccount = (key: AccountKey) => {
-    const selectedAccount = accounts.value.find((account: Account) => account.key === key)
-    formData.account = key
-    formData.username = selectedAccount?.userName ?? ''
-    formData.password = selectedAccount?.password ?? ''
-  }
-
   // 登录
   const handleSubmit = async () => {
     if (!formRef.value) return
@@ -208,30 +153,29 @@
       const valid = await formRef.value.validate()
       if (!valid) return
 
-      // 拖拽验证
+      /* 恢复滑块验证时启用：
       if (!isPassing.value) {
         isClickPass.value = true
         return
       }
+      */
 
       loading.value = true
 
       // 登录请求
       const { username, password } = formData
 
-      const { token, refreshToken } = await fetchLogin({
-        userName: username,
+      await fetchLogin({
+        username,
         password
       })
 
-      // 验证token
-      if (!token) {
-        throw new Error('Login failed - no token received')
-      }
-
-      // 存储 token 和登录状态
-      userStore.setToken(token, refreshToken)
+      // 清除旧 Bearer Token，并用受保护接口确认 HttpOnly Session Cookie 已生效。
+      userStore.clearToken()
+      const userInfo = await fetchGetUserInfo()
+      userStore.setUserInfo(userInfo)
       userStore.setLoginStatus(true)
+      userStore.checkAndClearWorktabs()
 
       // 登录成功处理
       showLoginSuccessNotice()
@@ -250,14 +194,12 @@
       }
     } finally {
       loading.value = false
-      resetDragVerify()
+      // resetDragVerify() // 恢复滑块验证时启用
     }
   }
 
-  // 重置拖拽验证
-  const resetDragVerify = () => {
-    dragVerify.value.reset()
-  }
+  // 恢复滑块验证时启用：
+  // const resetDragVerify = () => dragVerify.value?.reset()
 
   // 登录成功提示
   const showLoginSuccessNotice = () => {
@@ -275,10 +217,4 @@
 
 <style scoped>
   @import './style.css';
-</style>
-
-<style lang="scss" scoped>
-  :deep(.el-select__wrapper) {
-    height: 40px !important;
-  }
 </style>

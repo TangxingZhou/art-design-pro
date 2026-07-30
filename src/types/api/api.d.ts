@@ -24,7 +24,7 @@
  * ## 使用方式
  *
  * ```typescript
- * const params: Api.Auth.LoginParams = { userName: 'admin', password: '123456' }
+ * const params: Api.Auth.LoginParams = { username: 'admin', password: '123456' }
  * const response: Api.Auth.UserInfo = await fetchUserInfo()
  * ```
  *
@@ -64,21 +64,29 @@ declare namespace Api {
   namespace Auth {
     /** 登录参数 */
     interface LoginParams {
-      userName: string
+      email?: string
+      username?: string
       password: string
     }
 
     /** 登录响应 */
     interface LoginResponse {
       token: string
-      refreshToken: string
+      token_type: string
+      expires_at: number | null
+      id: string
+      email: string
+      name: string
+      role: string
+      profile_image_url?: string
+      permissions?: Record<string, unknown>
     }
 
     /** 用户信息 */
     interface UserInfo {
       buttons: string[]
       roles: string[]
-      userId: number
+      userId: string | number
       userName: string
       email: string
       avatar?: string

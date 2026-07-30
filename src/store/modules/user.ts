@@ -136,6 +136,14 @@ export const useUserStore = defineStore(
     }
 
     /**
+     * 清空旧的 Bearer Token，后端登录改为使用 HttpOnly Session Cookie。
+     */
+    const clearToken = () => {
+      accessToken.value = ''
+      refreshToken.value = ''
+    }
+
+    /**
      * 退出登录
      * 清空所有用户相关状态并跳转到登录页
      * 如果是同一账号重新登录，保留工作台标签页
@@ -222,6 +230,7 @@ export const useUserStore = defineStore(
       setLockStatus,
       setLockPassword,
       setToken,
+      clearToken,
       logOut,
       checkAndClearWorktabs
     }

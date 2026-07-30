@@ -8,6 +8,7 @@
       :model="modelValue"
       :label-position="labelPosition"
       v-bind="{ ...$attrs }"
+      @keydown.enter="handleEnterSearch"
     >
       <ElRow :gutter="gutter">
         <ElCol
@@ -209,6 +210,8 @@
     showSearch?: boolean
     /** 是否禁用搜索按钮 */
     disabledSearch?: boolean
+    /** 输入框按下回车时是否触发搜索 */
+    searchOnEnter?: boolean
     /** 搜索时是否清洗空值 */
     sanitizeOutput?: Partial<SanitizeOutputOptions>
   }
@@ -241,6 +244,7 @@
     showReset: true,
     showSearch: true,
     disabledSearch: false,
+    searchOnEnter: false,
     sanitizeOutput: () => ({})
   })
 
@@ -491,6 +495,14 @@
   const handleSearch = () => {
     // 对外只抛出清洗后的查询参数，避免接口收到空数组/空字符串。
     emit('search', getSanitizedOutput())
+  }
+
+  const handleEnterSearch = (event: KeyboardEvent) => {
+    if (!props.searchOnEnter || props.disabledSearch || event.isComposing) return
+    if (!(event.target instanceof HTMLInputElement)) return
+
+    event.preventDefault()
+    handleSearch()
   }
 
   defineExpose({

@@ -61,6 +61,20 @@ const axiosInstance = axios.create({
   ]
 })
 
+/** 判断响应是否为项目的 { code, msg/message, data } 包装格式 */
+function isBaseResponse<T>(value: unknown): value is BaseResponse<T> {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      'code' in value &&
+      'data' in value &&
+      ('msg' in value || 'message' in value)
+  )
+}
+
+const getResponseMessage = (response: BaseResponse<unknown>): string =>
+  response.msg || response.message || ''
+
 /** 请求拦截器 */
 axiosInstance.interceptors.request.use(
   (request: InternalAxiosRequestConfig) => {
@@ -82,11 +96,15 @@ axiosInstance.interceptors.request.use(
 
 /** 响应拦截器 */
 axiosInstance.interceptors.response.use(
-  (response: AxiosResponse<BaseResponse>) => {
-    const { code, msg } = response.data
-    if (code === ApiStatus.success) return response
-    if (code === ApiStatus.unauthorized) handleUnauthorizedError(msg)
-    throw createHttpError(msg || $t('httpMsg.requestFailed'), code)
+  (response: AxiosResponse<unknown>) => {
+    // FastAPI 接口直接返回业务 JSON，不使用项目原有的响应包装。
+    if (!isBaseResponse(response.data)) return response
+
+    const { code } = response.data
+    const message = getResponseMessage(response.data)
+    if (code >= 200 && code < 300) return response
+    if (code === ApiStatus.unauthorized) handleUnauthorizedError(message)
+    throw createHttpError(message || $t('httpMsg.requestFailed'), code)
   },
   (error) => {
     if (error.response?.status === ApiStatus.unauthorized) handleUnauthorizedError()
@@ -175,14 +193,15 @@ async function request<T = any>(config: ExtendedAxiosRequestConfig): Promise<T> 
   }
 
   try {
-    const res = await axiosInstance.request<BaseResponse<T>>(config)
+    const res = await axiosInstance.request<BaseResponse<T> | T>(config)
 
     // 显示成功消息
-    if (config.showSuccessMessage && res.data.msg) {
-      showSuccess(res.data.msg)
+    if (config.showSuccessMessage && isBaseResponse<T>(res.data)) {
+      const message = getResponseMessage(res.data)
+      if (message) showSuccess(message)
     }
 
-    return res.data.data as T
+    return isBaseResponse<T>(res.data) ? res.data.data : res.data
   } catch (error) {
     if (error instanceof HttpError && error.code !== ApiStatus.unauthorized) {
       const showMsg = config.showErrorMessage !== false
